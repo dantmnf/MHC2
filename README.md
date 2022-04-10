@@ -103,7 +103,7 @@ If display is HDR-capable, Windows will prefer HDR output, i.e. color encoded in
 
 **TL; DR: No way at reasonable cost.**
 
-Microsoft has a good tradition that trust hardware vendor over professional users. This also applies to HDR displays.
+Microsoft has a good tradition that trusting hardware vendors’ marketing scam over professional users. This also applies to HDR displays.
 
 If your display claims to be HDR-capable, you can disable it by one of the following ways:
 
