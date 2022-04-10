@@ -119,4 +119,4 @@ If your display claims to be HDR-capable, you can disable it by one of the follo
 [XDR]: https://www.apple.com/pro-display-xdr/
 [Creator Extreme]: https://www.lenovo.com/us/en/p/accessories-and-software/monitors/office/62a6rar3us
 [HX310]: https://pro.sony/ue_US/products/broadcastpromonitors/bvm-hx310
-[auto color management]: placeholder
+[auto color management]: https://user-images.githubusercontent.com/2252500/162628301-e2ead0a7-de96-406f-8b6d-419a1bdf7660.jpg
