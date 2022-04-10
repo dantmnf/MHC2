@@ -2,6 +2,8 @@ This repository collects information about next generation (WIP?) color manageme
 
 No NDA violated here.
 
+Should you have any further information, feel free to create issues or pull requests.
+
 # MHC2 Tag in ICC Profile
 
 The MHC2 tag contains minimum and maximum luminance values for the display, a color transform matrix, and 3 regamma LUTs for each channel.
@@ -44,9 +46,9 @@ struct regamma_lut {
 All collected ICC samples have the same semi-identity color transform matrix.
 
 ```
-[[1, 0 ,0 ,0],
- [0, 1 ,0 ,0],
- [0, 0 ,1 ,0]]
+[[1, 0, 0, 0],
+ [0, 1, 0, 0],
+ [0, 0, 1, 0]]
 ```
 
 ## Regamma LUT
@@ -60,9 +62,11 @@ The GDI SetDeviceGammaRamp, IDirect3DDevice9::SetGammaRamp, and IDXGIOutput::Set
 * Older Intel GPUs (at least UHD 630) can’t add values from other channels with the matrix.
 * AMD GPUs (at least RX 6800 XT) don’t apply the matrix to mouse cursor.
   * Caveat: a matrix of `[[0,1,0,0],[1,0,0,0],[0,0,1,0]]` not only swaps red and green channels, but also add a red tint.
+* Despite the GPUs above all have a working matrix transform function (e.g. hue shift or driver-level color-management).
 * Interactively adjust the matrix with [InteractiveMatrix](InteractiveMatrix) tool.
   * Assign `nvIccAdvancedColorIdentity.icm` to target display, and it will change the matrix values then reload calibration.
 * A proof-of-concept tool to generate MHC2-enabled ICC profiles can be found in [MHC2Gen](MHC2Gen).
+  * grab `lcms2.dll` from [my another project](https://github.com/dantmnf/AMDColorTweaks)
 
 # Advanced Color for SDR
 
