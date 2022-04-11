@@ -107,16 +107,16 @@ If display is HDR-capable, Windows will prefer HDR output, i.e. color encoded in
 
 **TL; DR: No way at reasonable cost.**
 
-Microsoft has a good tradition that [trusting hardware vendors’ marketing scam over professional users](https://support.microsoft.com/en-us/windows/hdr-settings-in-windows-2d767185-38ec-7fdc-6f97-bbc6c5ef24e6#:~:text=Colors%20do%20not%20display%20correctly%20on%20an%20external%20HDR%2Dcapable%20display.). This also applies to HDR displays.
+Microsoft has a good tradition that trusting hardware vendors’ marketing scam over professional users. [This also applies to HDR displays.](https://support.microsoft.com/en-us/windows/hdr-settings-in-windows-2d767185-38ec-7fdc-6f97-bbc6c5ef24e6#:~:text=Colors%20do%20not%20display%20correctly%20on%20an%20external%20HDR%2Dcapable%20display.)
 
-If your display claims to be HDR-capable, you can disable it by one of the following ways:
+If your display claims to be HDR-capable, you can disable it in one of the following ways:
 
 * Override EDID
-  * in Windows registry (cost: 0, may have glitch, or can’t override HDR metadata, or doesn’t work at all)
+  * in Windows registry (cost: 0, effect varies on GPU driver: may have glitches, or can’t override HDR metadata, or doesn’t work at all)
   * with workstation-grade GPUs (at 2x cost with similar performance)
   * by intercepting EDID in physical link (cost: unlimited)
+  * Use an external box that can override EDID (e.g. a ~$200 3DLUT loader, maybe not HDCP-capable)
 * Replace it with [some][XDR] [professional][Creator Extreme] [display][HX310] (cost: $3.5k+)
-* Use an external 3DLUT loader (cost: ~$200, maybe not HDCP-capable)
 
 
 [ScamHDR 400]: https://displayhdr.org/performance-criteria-cts1-1/
