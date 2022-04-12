@@ -51,6 +51,27 @@ All collected ICC samples have the same semi-identity color transform matrix.
  [0, 0, 1, 0]]
 ```
 
+From `Icm.h` in Windows SDK 10.0.22000.0:
+```cpp
+struct WCS_DEVICE_MHC2_CAPABILITIES
+{
+    UINT Size;                      //  Size of structure in bytes
+    BOOL SupportsMhc2;              //  Indicates if display supports MHC2
+
+    UINT RegammaLutEntryCount;      //  Max number of entries in the regamma lut
+
+    // Color space transform (CSC) matrix (row-major)
+    UINT CscXyzMatrixRows;          //  Number of rows in the color transform matrix
+    UINT CscXyzMatrixColumns;       //  Number of columns in the color transform matrix
+};
+```
+
+It seems that the transform applies in XYZ space, and the last column is offset.
+
+I don’t know why they make this decision, while all other implementations expect an RGB-to-RGB transform.
+
+A matrix of [`RGB_to_XYZ`](http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html)`(sRGB) * matrix([[0, 1, 0], [1, 0, 0], [0, 0, 1]]) * `[`XYZ_to_RGB`](http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html)`(sRGB)` attached to a sRGB profile effectively swaps red and green channels without tampering white point, check [profiles/SwapRedGreen.icm](profiles/SwapRedGreen.icm).
+
 ## Regamma LUT
 
 The observed behavior is like `vcgt` in ICC profile. Intermediate values are linearly interpolated from known points.
@@ -61,7 +82,6 @@ The GDI SetDeviceGammaRamp, IDirect3DDevice9::SetGammaRamp, and IDXGIOutput::Set
 
 * Older Intel GPUs (at least UHD 630) can’t add values from other channels with the matrix.
 * AMD GPUs (at least RX 6800 XT) don’t apply the matrix to mouse cursor.
-  * Caveat: a matrix of `[[0,1,0,0],[1,0,0,0],[0,0,1,0]]` not only swaps red and green channels, but also add a red tint.
 * Despite the GPUs above all have a working matrix transform function (e.g. hue shift or driver-level color-management).
 * Interactively adjust the matrix with [InteractiveMatrix](InteractiveMatrix) tool.
   * Assign `nvIccAdvancedColorIdentity.icm` to target display, and it will change the matrix values then reload calibration.

@@ -128,7 +128,7 @@ namespace MHC2Gen
             return new(rxyY.ToXY(), gxyY.ToXY(), bxyY.ToXY(), wxyY.ToXY());
         }
 
-        public static unsafe byte[] ProcessICC(ReadOnlySpan<byte> deviceIccProfile, ReadOnlySpan<byte> targetIccProfile)
+        public static unsafe byte[] ProcessICC(ReadOnlySpan<byte> deviceIccProfile, ReadOnlySpan<byte> sourceIccProfile)
         {
             var deviceProfile = MustOpenProfileFromMem(deviceIccProfile);
             using var defer1 = new Defer(() => CmsNative.cmsCloseProfile(deviceProfile));
@@ -164,25 +164,28 @@ namespace MHC2Gen
             var luts = new ushort[][] { new ushort[256], new ushort[256], new ushort[256] };
 
             var devicePrimaries = GetPrimariesFromProfile(deviceProfile);
-            var targetProfile = MustOpenProfileFromMem(targetIccProfile);
-            using var defer2 = new Defer(() => CmsNative.cmsCloseProfile(targetProfile));
+            var sourceProfile = MustOpenProfileFromMem(sourceIccProfile);
+            using var defer2 = new Defer(() => CmsNative.cmsCloseProfile(sourceProfile));
 
             var rTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigRedTRCTag);
             var gTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigGreenTRCTag);
             var bTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigBlueTRCTag);
-            CmsNative.cmsWriteTag(targetProfile, cmsTagSignature.cmsSigRedTRCTag, rTRC);
-            CmsNative.cmsWriteTag(targetProfile, cmsTagSignature.cmsSigGreenTRCTag, gTRC);
-            CmsNative.cmsWriteTag(targetProfile, cmsTagSignature.cmsSigBlueTRCTag, bTRC);
+            CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigRedTRCTag, rTRC);
+            CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigGreenTRCTag, gTRC);
+            CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigBlueTRCTag, bTRC);
 
 
-            var targetPrimaries = GetPrimariesFromProfile(targetProfile);
+            var sourcePrimaries = GetPrimariesFromProfile(sourceProfile);
 
-            var M = RgbToRgb(targetPrimaries, devicePrimaries);
+            // var rgb_transform = RgbToRgb(sourcePrimaries, devicePrimaries);
+            // rgb_transform = XYZToRgb(devicePrimaries) * RgbToXYZ(sourcePrimaries);
+            // var xyz_transform = RgbToXYZ(sourcePrimaries) * rgb_transform * XYZToRgb(sourcePrimaries);
+            var xyz_transform = RgbToXYZ(sourcePrimaries) * XYZToRgb(devicePrimaries);
 
             var mhc2_matrix = new double[] {
-               M[0,0], M[0,1], M[0,2], 0,
-               M[1,0], M[1,1], M[1,2], 0,
-               M[2,0], M[2,1], M[2,2], 0,
+               xyz_transform[0,0], xyz_transform[0,1], xyz_transform[0,2], 0,
+               xyz_transform[1,0], xyz_transform[1,1], xyz_transform[1,2], 0,
+               xyz_transform[2,0], xyz_transform[2,1], xyz_transform[2,2], 0,
             };
 
             var lut_size = 2;
@@ -247,27 +250,27 @@ namespace MHC2Gen
             
             bool br;
             fixed (byte* ptr = mhc2)
-                br = CmsNative.cmsWriteRawTag(targetProfile, mhc2_sig, ptr, (uint)mhc2.Length) != 0;
+                br = CmsNative.cmsWriteRawTag(sourceProfile, mhc2_sig, ptr, (uint)mhc2.Length) != 0;
             if (!br)
             {
                 throw new IOException("cmsWriteRawTag failed");
             }
 
-            br = CmsNative.cmsWriteTag(targetProfile, cmsTagSignature.cmsSigVcgtTag, null) != 0;
+            br = CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigVcgtTag, null) != 0;
             if (!br)
             {
                throw new IOException("cmsWriteRawTag failed");
             }
 
             uint newlen = 0;
-            br = CmsNative.cmsSaveProfileToMem(targetProfile, null, ref newlen) != 0;
+            br = CmsNative.cmsSaveProfileToMem(sourceProfile, null, ref newlen) != 0;
             if (!br)
             {
                 throw new IOException("cmsSaveProfileToMem failed");
             }
             var newicc = new byte[newlen];
             fixed (byte* ptr = newicc)
-                br = CmsNative.cmsSaveProfileToMem(targetProfile, ptr, ref newlen) != 0;
+                br = CmsNative.cmsSaveProfileToMem(sourceProfile, ptr, ref newlen) != 0;
             if (!br)
             {
                 throw new IOException("cmsSaveProfileToMem failed");
