@@ -70,7 +70,9 @@ It seems that the transform applies in XYZ space, and the last column is offset.
 
 I don’t know why they make this decision, while all other implementations expect an RGB-to-RGB transform.
 
-A matrix of [`RGB_to_XYZ`](http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html)`(sRGB) * matrix([[0, 1, 0], [1, 0, 0], [0, 0, 1]]) * `[`XYZ_to_RGB`](http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html)`(sRGB)` attached to a sRGB profile effectively swaps red and green channels without tampering white point, check [profiles/SwapRedGreen.icm](profiles/SwapRedGreen.icm).
+A matrix of `RGB_to_XYZ(sRGB) * matrix([[0, 1, 0], [1, 0, 0], [0, 0, 1]]) * XYZ_to_RGB(sRGB)` attached to a sRGB profile effectively swaps red and green channels without tampering white point, check [profiles/SwapRedGreen.icm](profiles/SwapRedGreen.icm).
+
+Check http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html for XYZ/RGB conversion matrix.
 
 ## Regamma LUT
 
