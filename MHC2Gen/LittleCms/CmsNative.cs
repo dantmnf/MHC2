@@ -175,7 +175,20 @@ namespace LittleCms
         public double y;
         public double Y;
     }
+    public enum cmsInfoType
+    {
+        cmsInfoDescription = 0,
+        cmsInfoManufacturer = 1,
+        cmsInfoModel = 2,
+        cmsInfoCopyright = 3
+    }
 
+    struct cmsCIExyYTRIPLE
+    {
+        public cmsCIExyY Red;
+        public cmsCIExyY Green;
+        public cmsCIExyY Blue;
+    }
     internal class CmsNative
     {
         [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
@@ -225,5 +238,38 @@ namespace LittleCms
 
         [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern unsafe int cmsSaveProfileToMem(IntPtr hProfile, void* ptr, ref uint size);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe IntPtr cmsMLUalloc(IntPtr ContextID, uint nItems);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe void cmsMLUfree(IntPtr mlu);
+
+
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Unicode)]
+        public static extern unsafe uint cmsMLUgetWide(IntPtr mlu, [MarshalAs(UnmanagedType.LPStr)] string LanguageCode, [MarshalAs(UnmanagedType.LPStr)] string CountryCode, char* buffer, uint bufferSize);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true, CharSet = CharSet.Unicode)]
+        public static extern unsafe int cmsMLUsetWide(IntPtr mlu, [MarshalAs(UnmanagedType.LPStr)] string LanguageCode, [MarshalAs(UnmanagedType.LPStr)] string CountryCode, [MarshalAs(UnmanagedType.LPWStr)] string WideString);
+
+
+
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe uint cmsGetProfileInfo(IntPtr hProfile, cmsInfoType Info, [MarshalAs(UnmanagedType.LPStr)] string LanguageCode, [MarshalAs(UnmanagedType.LPStr)] string CountryCode, char* buffer, uint bufferSize);
+
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe uint cmsGetHeaderManufacturer(IntPtr hProfile);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe void cmsSetHeaderManufacturer(IntPtr hProfile, uint manufacturer);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe uint cmsGetHeaderModel(IntPtr hProfile);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe void cmsSetHeaderModel(IntPtr hProfile, uint manufacturer);
+
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe IntPtr cmsCreateRGBProfile(in cmsCIExyY WhitePoint, in cmsCIExyYTRIPLE Primaries, IntPtr[] TransferFunction);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe void cmsMD5computeID(IntPtr hProfile);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe void cmsGetHeaderAttributes(IntPtr hProfile, out ulong flags);
+        [DllImport("lcms2", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern unsafe void cmsSetHeaderAttributes(IntPtr hProfile, ulong flags);
     }
 }

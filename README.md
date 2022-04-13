@@ -17,7 +17,7 @@ Below is the data structure of the MHC2 tag, which is inferred from several publ
 
 __attribute__((scalar_storage_order("big-endian")))
 struct MHC2 {
-    uint32_t tag_type = 'MHC2';
+    uint32_t signature = 'MHC2';
     uint32_t reserved = 0;
     uint32_t regamma_lut_size;
     int32_t min_luminance; // in cd/m2, divide 65536
@@ -27,17 +27,17 @@ struct MHC2 {
     uint32_t channel1_regamma_lut_offset = offsetof(MHC2, channel1_regamma_lut);
     uint32_t channel2_regamma_lut_offset = offsetof(MHC2, channel2_regamma_lut);
     int32_t matrix[12]; // 4x3 matrix, row-major, divide 65536
-    regamma_lut<regamma_lut_size> channel0_regamma_lut;
-    regamma_lut<regamma_lut_size> channel1_regamma_lut;
-    regamma_lut<regamma_lut_size> channel2_regamma_lut;
+    ICCs15Fixed16ArrayType<regamma_lut_size> channel0_regamma_lut;
+    ICCs15Fixed16ArrayType<regamma_lut_size> channel1_regamma_lut;
+    ICCs15Fixed16ArrayType<regamma_lut_size> channel2_regamma_lut;
 }
 
-template<size_t lut_size>
+template<size_t size>
 __attribute__((scalar_storage_order("big-endian")))
-struct regamma_lut {
-    uint32_t magic = 'sf32';
-    uint32_t reserved = 0;  // not read by mscms
-    uint32_t lut[lut_size]; // divide 65536
+struct ICCs15Fixed16ArrayType {
+    uint32_t signature = 'sf32';
+    uint32_t reserved = 0;
+    uint32_t values[size]; // divide 65536
 }
 ```
 

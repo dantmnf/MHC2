@@ -71,12 +71,72 @@ namespace MHC2Gen
             return result;
         }
 
+        private static unsafe void MustWriteTag(IntPtr profile_, cmsTagSignature tag, void* data)
+        {
+            var result = CmsNative.cmsWriteTag(profile_, tag, data);
+            if (result == 0)
+            {
+                var gat = BinaryPrimitives.ReverseEndianness((uint)tag);
+                var tagName = Encoding.ASCII.GetString((byte*)&gat, 4);
+                throw new FileFormatException($"write tag {tagName} failed");
+            }
+        }
+
         public static int EncodeS15F16(double value)
         {
             var x = (int)Math.Round(value * 65536);
             return x;
         }
 
+        public static IntPtr CheckPointer(IntPtr ptr)
+        {
+            if (ptr == IntPtr.Zero)
+            {
+                throw new Exception("pointer is null");
+            }
+            return ptr;
+        }
+
+        public static void CheckCmsBool(int value)
+        {
+            if (value == 0)
+            {
+                throw new Exception("lcms faild");
+            }
+        }
+
+        public static unsafe string? GetProfileInfo(IntPtr profile, cmsInfoType info)
+        {
+            var len = CmsNative.cmsGetProfileInfo(profile, cmsInfoType.cmsInfoModel, MLU.NoLanguage, MLU.NoCountry, null, 0);
+            if (len != 0)
+            {
+                var buffer = stackalloc char[(int)len];
+                CmsNative.cmsGetProfileInfo(profile, cmsInfoType.cmsInfoModel, MLU.NoLanguage, MLU.NoCountry, buffer, len);
+                return new string(buffer);
+            }
+            return null;
+        }
+
+        public static string DescribeDeviceProfile(IntPtr profile)
+        {
+            var model = GetProfileInfo(profile, cmsInfoType.cmsInfoModel);
+            if (model != null) return model;
+            var desc = GetProfileInfo(profile, cmsInfoType.cmsInfoDescription);
+            if (desc != null) return desc;
+            return "<Unknown device>";
+        }
+
+        public static unsafe string DescribeSourceProfile(IntPtr profile)
+        {
+            var desc = CmsNative.cmsReadTag(profile, cmsTagSignature.cmsSigProfileDescriptionTag);
+            if (desc != IntPtr.Zero)
+            {
+                var mlu = new MLU(desc);
+                var str = mlu.GetUnlocalizedString();
+                if (str != null) return str;
+            }
+            return "<unknown calibration target>";
+        }
 
         public static unsafe IntPtr MustOpenProfileFromMem(ReadOnlySpan<byte> profile)
         {
@@ -151,8 +211,8 @@ namespace MHC2Gen
             //        CmsNative.cmsFreeToneCurve(t);
             //});
             var wtpt = (cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigMediaWhitePointTag);
-
-            var max_nits = ((cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigLuminanceTag))->Y;
+            var lumi = (cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigLuminanceTag);
+            var max_nits = lumi->Y;
             var min_nits = 0.005;
             var bkpt = (cmsCIEXYZ*)CmsNative.cmsReadTag(deviceProfile, cmsTagSignature.cmsSigMediaBlackPointTag);
             if (bkpt != null && bkpt->Y != 0)
@@ -167,13 +227,33 @@ namespace MHC2Gen
             var sourceProfile = MustOpenProfileFromMem(sourceIccProfile);
             using var defer2 = new Defer(() => CmsNative.cmsCloseProfile(sourceProfile));
 
-            var rTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigRedTRCTag);
-            var gTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigGreenTRCTag);
-            var bTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigBlueTRCTag);
-            CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigRedTRCTag, rTRC);
-            CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigGreenTRCTag, gTRC);
-            CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigBlueTRCTag, bTRC);
-
+            var dev_rTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigRedTRCTag);
+            var dev_gTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigGreenTRCTag);
+            var dev_bTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigBlueTRCTag);
+            var deviceOetf = new IntPtr[] { MustReverseToneCurve(dev_rTRC), MustReverseToneCurve(dev_gTRC), MustReverseToneCurve(dev_bTRC) };
+            using var defer4 = new Defer(() =>
+            {
+                foreach (var t in deviceOetf)
+                    CmsNative.cmsFreeToneCurve(t);
+            });
+            var src_rTRC = MustReadTag(sourceProfile, cmsTagSignature.cmsSigRedTRCTag);
+            var src_gTRC = MustReadTag(sourceProfile, cmsTagSignature.cmsSigGreenTRCTag);
+            var src_bTRC = MustReadTag(sourceProfile, cmsTagSignature.cmsSigBlueTRCTag);
+            var sourceEotf = new IntPtr[] { src_rTRC, src_gTRC, src_bTRC };
+            var sourceVcgt = (IntPtr*)CmsNative.cmsReadTag(sourceProfile, cmsTagSignature.cmsSigVcgtTag);
+            IntPtr[]? sourceRevVcgt = null;
+            if (sourceVcgt != null)
+            {
+                sourceRevVcgt = new IntPtr[] { MustReverseToneCurve(sourceVcgt[0]), MustReverseToneCurve(sourceVcgt[1]), MustReverseToneCurve(sourceVcgt[2]) };
+            }
+            using var defer5 = new Defer(() =>
+            {
+                if (sourceRevVcgt != null)
+                {
+                    foreach (var t in sourceRevVcgt)
+                        CmsNative.cmsFreeToneCurve(t);
+                }
+            });
 
             var sourcePrimaries = GetPrimariesFromProfile(sourceProfile);
 
@@ -188,17 +268,29 @@ namespace MHC2Gen
                xyz_transform[2,0], xyz_transform[2,1], xyz_transform[2,2], 0,
             };
 
-            var lut_size = 2;
+            var lut_size = 256;
             var mhc2_lut = (int[][])Array.CreateInstance(typeof(int[]), 3);
-            if (vcgt != null)
+            if (true || vcgt != null)
             {
                 lut_size = 256;
                 for (int ch = 0; ch < 3; ch++)
                 {
                     mhc2_lut[ch] = new int[lut_size];
-                    for (int x = 0; x < lut_size; x++)
+                    for (int iinput = 0; iinput < lut_size; iinput++)
                     {
-                        mhc2_lut[ch][x] = EncodeS15F16(CmsNative.cmsEvalToneCurveFloat(vcgt[ch], (float)x / lut_size));
+                        var input = (float)iinput / (lut_size - 1);
+                        var src_input = input;
+                        if (sourceRevVcgt != null)
+                        {
+                            src_input = (int)CmsNative.cmsEvalToneCurveFloat(sourceRevVcgt[ch], input);
+                        }
+                        var linear = CmsNative.cmsEvalToneCurveFloat(sourceEotf[ch], input);
+                        var dev_output = CmsNative.cmsEvalToneCurveFloat(deviceOetf[ch], linear);
+                        if (vcgt != null)
+                        {
+                            dev_output = CmsNative.cmsEvalToneCurveFloat(vcgt[ch], dev_output);
+                        }
+                        mhc2_lut[ch][iinput] = EncodeS15F16(dev_output);
                     }
                 }
             }
@@ -247,30 +339,61 @@ namespace MHC2Gen
             }
             writer.Flush();
             var mhc2 = ms0.ToArray();
-            
+
+            var outputProfile = CmsNative.cmsCreateRGBProfile(sourcePrimaries.White.ToXYZ().ToCIExyY(), new cmsCIExyYTRIPLE
+            {
+                Red = sourcePrimaries.Red.ToXYZ().ToCIExyY(),
+                Green = sourcePrimaries.Green.ToXYZ().ToCIExyY(),
+                Blue = sourcePrimaries.Blue.ToXYZ().ToCIExyY()
+            }, new IntPtr[] { src_rTRC, src_gTRC, src_bTRC });
+            using var defer6 = new Defer(() => CmsNative.cmsCloseProfile(outputProfile));
+
+            // copy characteristics from device profile
+            var copy_tags = new cmsTagSignature[] { cmsTagSignature.cmsSigMediaBlackPointTag, cmsTagSignature.cmsSigLuminanceTag, cmsTagSignature.cmsSigDeviceMfgDescTag, cmsTagSignature.cmsSigDeviceModelDescTag };
+            // var remove_tags = new cmsTagSignature[] { cmsTagSignature.cmsSigViewingConditionsTag, cmsTagSignature.cmsSigViewingCondDescTag, cmsTagSignature.cmsSigTechnologyTag, cmsTagSignature.cmsSigVcgtTag, cmsTagSignature.cmsSigMeasurementTag };
+
+            foreach (var tag in copy_tags)
+            {
+                var tag_ptr = (void*)CmsNative.cmsReadTag(deviceProfile, tag);
+                if (tag_ptr != null)
+                {
+                    MustWriteTag(outputProfile, tag, tag_ptr);
+                }
+            }
+            // foreach (var tag in remove_tags)
+            // {
+            //     CmsNative.cmsWriteTag(sourceProfile, tag, null);
+            // }
+
+            // set output profile description
+
+            CmsNative.cmsSetHeaderManufacturer(outputProfile, CmsNative.cmsGetHeaderManufacturer(deviceProfile));
+            CmsNative.cmsSetHeaderModel(outputProfile, CmsNative.cmsGetHeaderModel(deviceProfile));
+            CmsNative.cmsGetHeaderAttributes(deviceProfile, out var profileAttr);
+            CmsNative.cmsSetHeaderAttributes(outputProfile, profileAttr);
+            var new_desc = $"{DescribeDeviceProfile(deviceProfile)} calibrated to {DescribeSourceProfile(sourceProfile)} (MHC2)";
+            Console.WriteLine("Output profile description: " + new_desc);
+            using var new_desc_mlu = MLU.FromUnlocalizedString(new_desc);
+            MustWriteTag(outputProfile, cmsTagSignature.cmsSigProfileDescriptionTag, (void*)new_desc_mlu.Handle);
+
             bool br;
             fixed (byte* ptr = mhc2)
-                br = CmsNative.cmsWriteRawTag(sourceProfile, mhc2_sig, ptr, (uint)mhc2.Length) != 0;
+                br = CmsNative.cmsWriteRawTag(outputProfile, mhc2_sig, ptr, (uint)mhc2.Length) != 0;
             if (!br)
             {
                 throw new IOException("cmsWriteRawTag failed");
             }
 
-            br = CmsNative.cmsWriteTag(sourceProfile, cmsTagSignature.cmsSigVcgtTag, null) != 0;
-            if (!br)
-            {
-               throw new IOException("cmsWriteRawTag failed");
-            }
-
+            CmsNative.cmsMD5computeID(outputProfile);
             uint newlen = 0;
-            br = CmsNative.cmsSaveProfileToMem(sourceProfile, null, ref newlen) != 0;
+            br = CmsNative.cmsSaveProfileToMem(outputProfile, null, ref newlen) != 0;
             if (!br)
             {
                 throw new IOException("cmsSaveProfileToMem failed");
             }
             var newicc = new byte[newlen];
             fixed (byte* ptr = newicc)
-                br = CmsNative.cmsSaveProfileToMem(sourceProfile, ptr, ref newlen) != 0;
+                br = CmsNative.cmsSaveProfileToMem(outputProfile, ptr, ref newlen) != 0;
             if (!br)
             {
                 throw new IOException("cmsSaveProfileToMem failed");
