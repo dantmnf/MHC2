@@ -33,5 +33,7 @@ namespace LittleCms
 
         public static RgbPrimaries sRGB { get; } = new RgbPrimaries(new() { x = 0.64, y = 0.33 }, new() { x = 0.30, y = 0.60 }, new() { x = 0.15, y = 0.06 }, new() { x = 0.3127, y = 0.3290 });
 
+        public static RgbPrimaries Rec2020 { get; } = new RgbPrimaries(new() { x = 0.708, y = 0.292 }, new() { x = 0.170, y = 0.797 }, new() { x = 0.131, y = 0.046 }, new() { x = 0.3127, y = 0.3290 });
+
     }
 }

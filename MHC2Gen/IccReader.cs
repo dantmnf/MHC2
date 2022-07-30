@@ -400,5 +400,185 @@ namespace MHC2Gen
             }
             return newicc;
         }
+
+        public static unsafe byte[] CreatePQ10DecodeIcc(ReadOnlySpan<byte> deviceIccProfile)
+        {
+            var deviceProfile = MustOpenProfileFromMem(deviceIccProfile);
+            using var defer1 = new Defer(() => CmsNative.cmsCloseProfile(deviceProfile));
+
+            var pcs = CmsNative.cmsGetPCS(deviceProfile);
+            var targetSpace = CmsNative.cmsGetColorSpace(deviceProfile);
+
+            if (pcs != cmsColorSpaceSignature.cmsSigXYZData || targetSpace != cmsColorSpaceSignature.cmsSigRgbData)
+            {
+                throw new FileFormatException("ICC profile is not XYZ->RGB");
+            }
+
+
+
+
+            //var trcs = new IntPtr[] { MustReverseToneCurve(rTRC), MustReverseToneCurve(gTRC), MustReverseToneCurve(bTRC) };
+            //using var defer3 = new Defer(() =>
+            //{
+            //    foreach (var t in trcs)
+            //        CmsNative.cmsFreeToneCurve(t);
+            //});
+            var wtpt = (cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigMediaWhitePointTag);
+            var lumi = (cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigLuminanceTag);
+            var max_nits = lumi->Y;
+            var min_nits = 0.005;
+            var bkpt = (cmsCIEXYZ*)CmsNative.cmsReadTag(deviceProfile, cmsTagSignature.cmsSigMediaBlackPointTag);
+            if (bkpt != null && bkpt->Y != 0)
+            {
+                var bkpt_scale = bkpt->Y / wtpt->Y;
+                min_nits = max_nits * bkpt_scale;
+            }
+            var vcgt = (IntPtr*)CmsNative.cmsReadTag(deviceProfile, cmsTagSignature.cmsSigVcgtTag);
+            var luts = new ushort[][] { new ushort[256], new ushort[256], new ushort[256] };
+
+            var devicePrimaries = GetPrimariesFromProfile(deviceProfile);
+
+            var dev_rTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigRedTRCTag);
+            var dev_gTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigGreenTRCTag);
+            var dev_bTRC = MustReadTag(deviceProfile, cmsTagSignature.cmsSigBlueTRCTag);
+            var deviceOetf = new IntPtr[] { MustReverseToneCurve(dev_rTRC), MustReverseToneCurve(dev_gTRC), MustReverseToneCurve(dev_bTRC) };
+            using var defer4 = new Defer(() =>
+            {
+                foreach (var t in deviceOetf)
+                    CmsNative.cmsFreeToneCurve(t);
+            });
+
+
+            var sourcePrimaries = RgbPrimaries.Rec2020;
+
+            // var rgb_transform = RgbToRgb(sourcePrimaries, devicePrimaries);
+            // rgb_transform = XYZToRgb(devicePrimaries) * RgbToXYZ(sourcePrimaries);
+            // var xyz_transform = RgbToXYZ(sourcePrimaries) * rgb_transform * XYZToRgb(sourcePrimaries);
+            var xyz_transform = RgbToXYZ(sourcePrimaries) * XYZToRgb(devicePrimaries);
+
+            var mhc2_matrix = new double[] {
+               xyz_transform[0,0], xyz_transform[0,1], xyz_transform[0,2], 0,
+               xyz_transform[1,0], xyz_transform[1,1], xyz_transform[1,2], 0,
+               xyz_transform[2,0], xyz_transform[2,1], xyz_transform[2,2], 0,
+            };
+
+            var lut_size = 1024;
+            var mhc2_lut = (int[][])Array.CreateInstance(typeof(int[]), 3);
+            for (int ch = 0; ch < 3; ch++)
+            {
+                mhc2_lut[ch] = new int[lut_size];
+                for (int iinput = 0; iinput < lut_size; iinput++)
+                {
+                    var pqinput = (double)iinput / (lut_size - 1);
+                    var nits = LittleCms.ST2084.SignalToNits(pqinput);
+                    var linear = Math.Max(nits - min_nits, 0) / (max_nits - min_nits);
+                    var dev_output = CmsNative.cmsEvalToneCurveFloat(deviceOetf[ch], (float)linear);
+                    if (vcgt != null)
+                    {
+                        dev_output = CmsNative.cmsEvalToneCurveFloat(vcgt[ch], dev_output);
+                    }
+                    Console.WriteLine($"Channel {ch}: PQ {iinput} -> {nits} cd/m2 -> SDR {dev_output * 255}");
+                    mhc2_lut[ch][iinput] = EncodeS15F16(dev_output);
+                }
+            }
+            const cmsTagSignature mhc2_sig = (cmsTagSignature)0x4D484332;
+
+            var ms0 = new MemoryStream();
+            var writer = new BinaryWriter(ms0);
+            // type
+            writer.Write(BinaryPrimitives.ReverseEndianness((int)mhc2_sig));
+            writer.Write(BinaryPrimitives.ReverseEndianness(0));
+
+            writer.Write(BinaryPrimitives.ReverseEndianness(lut_size));
+            writer.Write(BinaryPrimitives.ReverseEndianness(EncodeS15F16(min_nits)));
+            writer.Write(BinaryPrimitives.ReverseEndianness(EncodeS15F16(max_nits)));
+            // matrix offset
+            writer.Write(BinaryPrimitives.ReverseEndianness(36));
+            // lut0 offset
+            writer.Write(BinaryPrimitives.ReverseEndianness(84));
+            // lut1 offset
+            var lut1_offset = 84 + 8 + lut_size * 4;
+            writer.Write(BinaryPrimitives.ReverseEndianness(lut1_offset));
+            // lut2 offset
+            var lut2_offset = lut1_offset + 8 + lut_size * 4;
+            writer.Write(BinaryPrimitives.ReverseEndianness(lut2_offset));
+
+            foreach (var e in mhc2_matrix)
+            {
+                writer.Write(BinaryPrimitives.ReverseEndianness(EncodeS15F16(e)));
+            }
+
+            for (int ch = 0; ch < 3; ch++)
+            {
+                writer.Write(new ReadOnlySpan<byte>(new byte[] { (byte)'s', (byte)'f', (byte)'3', (byte)'2', 0, 0, 0, 0 }));
+                for (int i = 0; i < lut_size; i++)
+                {
+                    writer.Write(BinaryPrimitives.ReverseEndianness(mhc2_lut[ch][i]));
+                }
+            }
+            writer.Flush();
+            var mhc2 = ms0.ToArray();
+
+            var outputProfile = CmsNative.cmsCreateRGBProfile(devicePrimaries.White.ToXYZ().ToCIExyY(), new cmsCIExyYTRIPLE
+            {
+                Red = devicePrimaries.Red.ToXYZ().ToCIExyY(),
+                Green = devicePrimaries.Green.ToXYZ().ToCIExyY(),
+                Blue = devicePrimaries.Blue.ToXYZ().ToCIExyY()
+            }, new IntPtr[] { dev_rTRC, dev_gTRC, dev_bTRC });
+            using var defer6 = new Defer(() => CmsNative.cmsCloseProfile(outputProfile));
+
+            // copy characteristics from device profile
+            var copy_tags = new cmsTagSignature[] { cmsTagSignature.cmsSigMediaBlackPointTag, cmsTagSignature.cmsSigLuminanceTag, cmsTagSignature.cmsSigDeviceMfgDescTag, cmsTagSignature.cmsSigDeviceModelDescTag };
+            // var remove_tags = new cmsTagSignature[] { cmsTagSignature.cmsSigViewingConditionsTag, cmsTagSignature.cmsSigViewingCondDescTag, cmsTagSignature.cmsSigTechnologyTag, cmsTagSignature.cmsSigVcgtTag, cmsTagSignature.cmsSigMeasurementTag };
+
+            foreach (var tag in copy_tags)
+            {
+                var tag_ptr = (void*)CmsNative.cmsReadTag(deviceProfile, tag);
+                if (tag_ptr != null)
+                {
+                    MustWriteTag(outputProfile, tag, tag_ptr);
+                }
+            }
+            // foreach (var tag in remove_tags)
+            // {
+            //     CmsNative.cmsWriteTag(sourceProfile, tag, null);
+            // }
+
+            // set output profile description
+
+            CmsNative.cmsSetHeaderManufacturer(outputProfile, CmsNative.cmsGetHeaderManufacturer(deviceProfile));
+            CmsNative.cmsSetHeaderModel(outputProfile, CmsNative.cmsGetHeaderModel(deviceProfile));
+            CmsNative.cmsGetHeaderAttributes(deviceProfile, out var profileAttr);
+            CmsNative.cmsSetHeaderAttributes(outputProfile, profileAttr);
+            var new_desc = $"{DescribeDeviceProfile(deviceProfile)} HDR10 (MHC2 PQ10 decode)";
+            Console.WriteLine("Output profile description: " + new_desc);
+            using var new_desc_mlu = MLU.FromUnlocalizedString(new_desc);
+            MustWriteTag(outputProfile, cmsTagSignature.cmsSigProfileDescriptionTag, (void*)new_desc_mlu.Handle);
+
+            bool br;
+            fixed (byte* ptr = mhc2)
+                br = CmsNative.cmsWriteRawTag(outputProfile, mhc2_sig, ptr, (uint)mhc2.Length) != 0;
+            if (!br)
+            {
+                throw new IOException("cmsWriteRawTag failed");
+            }
+
+            CmsNative.cmsMD5computeID(outputProfile);
+            uint newlen = 0;
+            br = CmsNative.cmsSaveProfileToMem(outputProfile, null, ref newlen) != 0;
+            if (!br)
+            {
+                throw new IOException("cmsSaveProfileToMem failed");
+            }
+            var newicc = new byte[newlen];
+            fixed (byte* ptr = newicc)
+                br = CmsNative.cmsSaveProfileToMem(outputProfile, ptr, ref newlen) != 0;
+            if (!br)
+            {
+                throw new IOException("cmsSaveProfileToMem failed");
+            }
+            return newicc;
+        }
+
     }
 }
