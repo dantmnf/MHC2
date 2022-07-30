@@ -89,11 +89,14 @@ The GDI SetDeviceGammaRamp, IDirect3DDevice9::SetGammaRamp, and IDXGIOutput::Set
   * Assign `nvIccAdvancedColorIdentity.icm` to target display, and it will change the matrix values then reload calibration.
 * A proof-of-concept tool to generate MHC2-enabled ICC profiles can be found in [MHC2Gen](MHC2Gen).
   * grab `lcms2.dll` from [my another project](https://github.com/dantmnf/AMDColorTweaks)
-  * example usage: 
+  * example 1: calibrate to sRGB in SDR mode (i.e. Advanced Color disabled)
     ```
-    MHC2Gen "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "C:\Windows\System32\spool\drivers\color\sRGB Color Space Profile.icm" "MODEL calibrated to sRGB.icm"
+    MHC2Gen sdr-calib "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "C:\Windows\System32\spool\drivers\color\sRGB Color Space Profile.icm" "MODEL calibrated to sRGB.icm"
     ```
-  * the generated profile is meant to be used with SDR mode (i.e. Advanced Color disabled)
+  * example 2: decode Advanced Color HDR in GPU (disable HDR decode in display)
+    ```
+    MHC2Gen hdr-decode "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL PQ10 decode.icm"
+    ```
 
 # Advanced Color for SDR
 
