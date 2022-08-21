@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
-using MHC2Gen.Util;
 using LittleCms;
 using System.Buffers.Binary;
 using MathNet.Numerics.LinearAlgebra;
@@ -188,7 +187,7 @@ namespace MHC2Gen
             return new(rxyY.ToXY(), gxyY.ToXY(), bxyY.ToXY(), wxyY.ToXY());
         }
 
-        public static unsafe byte[] ProcessICC(ReadOnlySpan<byte> deviceIccProfile, ReadOnlySpan<byte> sourceIccProfile)
+        public static unsafe byte[] CreateCscIcc(ReadOnlySpan<byte> deviceIccProfile, ReadOnlySpan<byte> sourceIccProfile)
         {
             var deviceProfile = MustOpenProfileFromMem(deviceIccProfile);
             using var defer1 = new Defer(() => CmsNative.cmsCloseProfile(deviceProfile));
@@ -269,7 +268,7 @@ namespace MHC2Gen
             };
 
             var lut_size = 256;
-            var mhc2_lut = (int[][])Array.CreateInstance(typeof(int[]), 3);
+            var mhc2_lut = new int[3][];
             if (true || vcgt != null)
             {
                 lut_size = 256;
@@ -463,7 +462,7 @@ namespace MHC2Gen
             };
 
             var lut_size = 1024;
-            var mhc2_lut = (int[][])Array.CreateInstance(typeof(int[]), 3);
+            var mhc2_lut = new int[3][];
             for (int ch = 0; ch < 3; ch++)
             {
                 mhc2_lut[ch] = new int[lut_size];
@@ -573,6 +572,119 @@ namespace MHC2Gen
             var newicc = new byte[newlen];
             fixed (byte* ptr = newicc)
                 br = CmsNative.cmsSaveProfileToMem(outputProfile, ptr, ref newlen) != 0;
+            if (!br)
+            {
+                throw new IOException("cmsSaveProfileToMem failed");
+            }
+            return newicc;
+        }
+
+        public static unsafe byte[] CreateSdrAcmIcc(ReadOnlySpan<byte> deviceIccProfile)
+        {
+            var deviceProfile = MustOpenProfileFromMem(deviceIccProfile);
+            using var defer1 = new Defer(() => CmsNative.cmsCloseProfile(deviceProfile));
+
+            var pcs = CmsNative.cmsGetPCS(deviceProfile);
+            var targetSpace = CmsNative.cmsGetColorSpace(deviceProfile);
+
+            if (pcs != cmsColorSpaceSignature.cmsSigXYZData || targetSpace != cmsColorSpaceSignature.cmsSigRgbData)
+            {
+                throw new FileFormatException("ICC profile is not XYZ->RGB");
+            }
+
+
+
+
+            var wtpt = (cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigMediaWhitePointTag);
+            var lumi = (cmsCIEXYZ*)MustReadTag(deviceProfile, cmsTagSignature.cmsSigLuminanceTag);
+            var max_nits = lumi->Y;
+            var min_nits = 0.005;
+            var bkpt = (cmsCIEXYZ*)CmsNative.cmsReadTag(deviceProfile, cmsTagSignature.cmsSigMediaBlackPointTag);
+            if (bkpt != null && bkpt->Y != 0)
+            {
+                var bkpt_scale = bkpt->Y / wtpt->Y;
+                min_nits = max_nits * bkpt_scale;
+            }
+            var vcgt = (IntPtr*)CmsNative.cmsReadTag(deviceProfile, cmsTagSignature.cmsSigVcgtTag);
+            var luts = new ushort[][] { new ushort[256], new ushort[256], new ushort[256] };
+
+   
+            var mhc2_matrix = new double[] {
+               1, 0, 0, 0,
+               0, 1, 0, 0,
+               0, 0, 1, 0,
+            };
+
+            var lut_size = 256;
+            var mhc2_lut = new int[3][];
+            for (int ch = 0; ch < 3; ch++)
+            {
+                for (int iinput = 0; iinput < lut_size; iinput++)
+                {
+                    var finput = (float)iinput / (lut_size - 1);
+                    var foutput = CmsNative.cmsEvalToneCurveFloat(vcgt[ch], finput);
+                    mhc2_lut[ch][iinput] = EncodeS15F16(foutput);
+                }
+            }
+            const cmsTagSignature mhc2_sig = (cmsTagSignature)0x4D484332;
+
+            var ms0 = new MemoryStream();
+            var writer = new BinaryWriter(ms0);
+            // type
+            writer.Write(BinaryPrimitives.ReverseEndianness((int)mhc2_sig));
+            writer.Write(BinaryPrimitives.ReverseEndianness(0));
+
+            writer.Write(BinaryPrimitives.ReverseEndianness(lut_size));
+            writer.Write(BinaryPrimitives.ReverseEndianness(EncodeS15F16(min_nits)));
+            writer.Write(BinaryPrimitives.ReverseEndianness(EncodeS15F16(max_nits)));
+            // matrix offset
+            writer.Write(BinaryPrimitives.ReverseEndianness(36));
+            // lut0 offset
+            writer.Write(BinaryPrimitives.ReverseEndianness(84));
+            // lut1 offset
+            var lut1_offset = 84 + 8 + lut_size * 4;
+            writer.Write(BinaryPrimitives.ReverseEndianness(lut1_offset));
+            // lut2 offset
+            var lut2_offset = lut1_offset + 8 + lut_size * 4;
+            writer.Write(BinaryPrimitives.ReverseEndianness(lut2_offset));
+
+            foreach (var e in mhc2_matrix)
+            {
+                writer.Write(BinaryPrimitives.ReverseEndianness(EncodeS15F16(e)));
+            }
+
+            for (int ch = 0; ch < 3; ch++)
+            {
+                writer.Write(new ReadOnlySpan<byte>(new byte[] { (byte)'s', (byte)'f', (byte)'3', (byte)'2', 0, 0, 0, 0 }));
+                for (int i = 0; i < lut_size; i++)
+                {
+                    writer.Write(BinaryPrimitives.ReverseEndianness(mhc2_lut[ch][i]));
+                }
+            }
+            writer.Flush();
+            var mhc2 = ms0.ToArray();
+
+            // vcgt is moved to MHC2
+            CmsNative.cmsWriteTag(deviceProfile, cmsTagSignature.cmsSigVcgtTag, null);
+
+            bool br;
+            fixed (byte* ptr = mhc2)
+                br = CmsNative.cmsWriteRawTag(deviceProfile, mhc2_sig, ptr, (uint)mhc2.Length) != 0;
+            if (!br)
+            {
+                throw new IOException("cmsWriteRawTag failed");
+            }
+
+            CmsNative.cmsMD5computeID(deviceProfile);
+            uint newlen = 0;
+            br = CmsNative.cmsSaveProfileToMem(deviceProfile, null, ref newlen) != 0;
+            if (!br)
+            {
+                throw new IOException("cmsSaveProfileToMem failed");
+            }
+            var newicc = new byte[newlen];
+            fixed (byte* ptr = newicc)
+                br = CmsNative.cmsSaveProfileToMem(deviceProfile, ptr, ref newlen) != 0;
             if (!br)
             {
                 throw new IOException("cmsSaveProfileToMem failed");
