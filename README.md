@@ -123,7 +123,7 @@ With supported hardware configuration (see below), a new setting will appear:
 
 ![][auto color management]
 
-To specify display characteristics, add an ICC profile as advanced color profile, if not working, add an identity MHC2 tag to that profile. Note that vcgt will not be applied, don’t set calibration target when creating profile.
+To specify display characteristics, add an ICC profile for that display (don’t check “Add as Advanced Color Profile”), if not working, add an identity MHC2 tag to that profile. Note that vcgt will not be applied, don’t set calibration target when creating profile.
 
 A supported hardware configuration consists of:
 
