@@ -128,9 +128,9 @@ To specify display characteristics, add an ICC profile for that display (don’t
 A supported hardware configuration consists of:
 
 * Supported GPU (Intel UHD 630 is not the case)
-* *Non*-HDR display.
+* *Non*-HDR display (this may subject to change)
 
-If display is HDR-capable, Windows will prefer HDR output, i.e. color encoded in Rec. 2020 and brightness encoded in SMPTE ST 2084 (PQ) instead of native gamut and transfer, and expects the display controller to convert them to appropriate electrical signal for the panel. Except for some [professional][XDR] or [reference][HX310] displays, this should be considered unreliable, inaccurate, and impossible to calibrate
+If display is HDR-capable, Windows will prefer HDR output (at present), i.e. color encoded in Rec. 2020 and brightness encoded in SMPTE ST 2084 (PQ) instead of native gamut and transfer, and expects the display controller to convert them to appropriate electrical signal for the panel. Except for some [professional][XDR] or [reference][HX310] displays, this should be considered unreliable, inaccurate, and impossible to calibrate
 
 ## How to unfuck your [ScamHDR 400] or other HDRn’t displays
 ### i.e. How to force disable fake HDR 
