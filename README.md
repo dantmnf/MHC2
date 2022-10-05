@@ -20,7 +20,7 @@ The Windows ICC loader (`mscms.dll`) passes a matrix and LUT originated from ICC
 
 # Access Color Space Transform DDI via ICC Profile
 
-The `MHC2` tag is a Microsoft-specific private extension to ICC profiles. The tag contains minimum<sup>\[1]</sup> and peak<sup>\[2]</sup> luminance values for the display, a color transform matrix, and 3 regamma LUTs for each channel. 
+The `MHC2` tag is a Microsoft-specific private extension to ICC profiles. The tag contains minimum[^1] and peak[^2] luminance values for the display, a color transform matrix, and 3 regamma LUTs for each channel. 
 
 The transform matrix and regamma LUT are transformed to LUT-matrix-LUT form and passed to `IOCTL_COLORSPACE_TRANSFORM_SET`.
 
@@ -57,9 +57,6 @@ struct ICCs15Fixed16ArrayType {
 }
 ```
 
-\[1] The mediaBlackPointTag (`bkpt`) is no longer in ICC specification.
-
-\[2] Peak luminance of probably a small part of the display. Maximum average full-frame luminance should reside in the standard luminanceTag (`lumi`).
 
 ## Color Transform Matrix
 
@@ -116,9 +113,9 @@ B'
 \right)
 $$
 
-RGB/XYZ (3×3) matrices<sup>\[3]</sup> and degamma/regamma function are fixed in this pipeline:
+RGB/XYZ (3×3) matrices[^3] and degamma/regamma function are fixed in this pipeline:
 
-* For SDR output, RGB/XYZ transform is based on sRGB and degamma/regamma transform is based on sRGB transfer function (or gamma 2.2, see \[4]).
+* For SDR output, RGB/XYZ transform is based on sRGB and degamma/regamma transform is based on sRGB transfer function (or gamma 2.2[^4]).
 * For HDR output, RGB/XYZ transform is based on Rec. 2020 and degamma/regamma transform is based on ST 2084 (PQ).
 
 We can do some linear algebra 101 exercise to eliminate fixed RGB/XYZ matrices in pipeline and use a RGB-to-RGB matrix:
@@ -188,11 +185,8 @@ $$
 
 in SDR mode swaps red and green channels, check [profiles/SwapRedGreen.icm](profiles/SwapRedGreen.icm).
 
-Since degamma/regamma function are fixed, we need to use corresponding TRC (sRGB or 2.2<sup>\[4]</sup>) in the ICC profile that have non-identity XYZ transform matrix.
+Since degamma/regamma function are fixed, we need to use corresponding TRC (sRGB or gamma 2.2[^4]) in the ICC profile that have non-identity XYZ transform matrix.
 
-\[3] Check http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html for XYZ/RGB conversion matrix.
-
-\[4] headers suppose a gamma 2.2 transfer (`OUTPUT_WIRE_COLOR_SPACE_G22_P709`) but sRGB transfer function coefficients are found in `Windows.Internal.Graphics.Display.DisplayColorManagement.dll`, which merges XYZ matrix, the MHC2 regamma LUT and the GDI gamma ramp to an RGB LUT-matrix-LUT pipeline.
 
 ## Experiments
 
@@ -281,4 +275,12 @@ If your display claims to be HDR-capable, you can disable it in one of the follo
 [XDR]: https://www.apple.com/pro-display-xdr/
 [Creator Extreme]: https://www.lenovo.com/us/en/p/accessories-and-software/monitors/office/62a6rar3us
 [HX310]: https://pro.sony/ue_US/products/broadcastpromonitors/bvm-hx310
-[auto color management]: https://user-images.githubusercontent.com/2252500/162628301-e2ead0a7-de96-406f-8b6d-419a1bdf7660.jpg
+[auto color management]: https://user-images.githubusercontent.com/2252500/194107647-788c3cab-6730-4728-b337-266ab9867481.png
+
+[^1]: The mediaBlackPointTag (`bkpt`) is no longer in ICC specification.
+
+[^2]: Peak luminance of probably a small part of the display. Maximum average full-frame luminance should reside in the standard luminanceTag (`lumi`).
+
+[^3]: Check http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html for XYZ/RGB conversion matrix.
+
+[^4]: headers suppose a gamma 2.2 transfer (`OUTPUT_WIRE_COLOR_SPACE_G22_P709`) but sRGB transfer function coefficients are found in `Windows.Internal.Graphics.Display.DisplayColorManagement.dll`, which merges XYZ matrix, the MHC2 regamma LUT and the GDI gamma ramp to an RGB LUT-matrix-LUT pipeline.
