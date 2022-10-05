@@ -9,7 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="MathNet.Numerics" Version="4.15.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
     <PackageReference Include="System.IO.Packaging" Version="6.0.0" />
   </ItemGroup>
 
@@ -44,5 +46,9 @@
     <ItemGroup Condition="'$(UseNativeAot)' == 'true'">
         <DirectPInvoke Include="lcms2" />
         <NativeLibrary Include="..\lcms2\Lib\MS\lcms2_static.lib" Condition="$(RuntimeIdentifier.StartsWith('win'))" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\LittleCms\LittleCms.csproj" />
     </ItemGroup>
 </Project>

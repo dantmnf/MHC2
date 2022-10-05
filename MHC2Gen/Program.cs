@@ -1,80 +1,109 @@
 ﻿using System;
 using System.IO;
+using LittleCms;
+using System.CommandLine;
 
 namespace MHC2Gen
 {
+
+
     internal class Program
     {
-
-        private static void ShowUsage()
+        public enum NamedGamut
         {
-            var argv0 = Util.GetArgv0();
-            Console.WriteLine("Usage: {0} sdr-calib <device profile> <calibration target profile> <output profile>", argv0);
-            Console.WriteLine("           create a matrix-LUT calibration profile for a given device profile");
-            Console.WriteLine("           and target profile");
-            Console.WriteLine("       {0} sdr-acm <device profile> <output profile>", argv0);
-            Console.WriteLine("           prepare profile for SDR advanced color");
-            Console.WriteLine("       {0} hdr-decode <device profile> <output profile>", argv0);
-            Console.WriteLine("           create a matrix-LUT profile to convert Windows HDR10 output to SDR");
-            Console.WriteLine("           (hard clip, no tone mapping)");
+            sRGB,
+            AdobeRGB,
+            P3D65,
+            BT2020
         }
-
         static int Main(string[] args)
         {
-            if (args.Length < 1)
-            {
-                ShowUsage();
-                return 1;
-            }
-            var action = args[0];
-            if (action == "sdr-calib")
-            {
-                if (args.Length != 4)
-                {
-                    ShowUsage();
-                    return 1;
-                }
-                var deviceProfile = args[1];
-                var targetProfile = args[2];
-                var outputProfile = args[3];
-                var devicc = File.ReadAllBytes(deviceProfile);
-                var srgbicc = File.ReadAllBytes(targetProfile);
-                var mhc2icc = IccReader.CreateCscIcc(devicc, srgbicc);
-                File.WriteAllBytes(outputProfile, mhc2icc);
-                Console.WriteLine("Written profile {0}", outputProfile);
+            var rootcmd = new RootCommand();
 
-            }
-            else if (action == "sdr-acm")
-            {
-                if (args.Length != 3)
-                {
-                    ShowUsage();
-                    return 1;
-                }
-                var deviceProfile = args[1];
-                var outputProfile = args[2];
-                var devicc = File.ReadAllBytes(deviceProfile);
-                var mhc2icc = IccReader.CreateSdrAcmIcc(devicc);
-                File.WriteAllBytes(outputProfile, mhc2icc);
-                Console.WriteLine("Written profile {0}", outputProfile);
+            var sdrcsccmd = new Command("sdr-csc", "create a matrix-LUT calibration profile for a given device profile");
+            var sdracmcmd = new Command("sdr-acm", "create profile for SDR advanced color");
+            var hdrdecodecmd = new Command("hdr-decode", "create a matrix-LUT profile to convert Windows HDR10 output to SDR (hard clip, no tone mapping)");
 
-            }
-            else if (action == "hdr-decode")
-            {
-                if (args.Length != 3)
-                {
-                    ShowUsage();
-                    return 1;
-                }
-                var deviceProfile = args[1];
-                var outputProfile = args[2];
-                var devicc = File.ReadAllBytes(deviceProfile);
-                var mhc2icc = IccReader.CreatePQ10DecodeIcc(devicc);
-                File.WriteAllBytes(outputProfile, mhc2icc);
-                Console.WriteLine("Written profile {0}", outputProfile);
+            var srcgamutoption = new Option<NamedGamut?>("--source-gamut", "specify source gamut for transform");
+            var srcgamuticcoption = new Option<string?>("--source-gamut-icc", "specify source gamut for transform with ICC profile, only primaries and white point are used");
 
-            }
-            return 0;
+            var calibtransopt = new Option<bool>("--calibrate-transfer", "calibrate output transfer to sRGB");
+
+            var devprofarg = new Argument<string>("device profile");
+            var outprofarg = new Argument<string>("output profile");
+
+            sdrcsccmd.Add(srcgamutoption);
+            sdrcsccmd.Add(srcgamuticcoption);
+            sdrcsccmd.Add(devprofarg);
+            sdrcsccmd.Add(outprofarg);
+
+            sdracmcmd.Add(calibtransopt);
+            sdracmcmd.Add(devprofarg);
+            sdracmcmd.Add(outprofarg);
+
+            hdrdecodecmd.Add(devprofarg);
+            hdrdecodecmd.Add(outprofarg);
+
+            rootcmd.Add(sdrcsccmd);
+            rootcmd.Add(sdracmcmd);
+            rootcmd.Add(hdrdecodecmd);
+
+            sdrcsccmd.AddValidator((result) =>
+            {
+                if (result.GetValueForOption(srcgamutoption) != null && result.GetValueForOption(srcgamuticcoption) != null)
+                {
+                    result.ErrorMessage = "source-gamut and source-gamut-icc cannot be used together.";
+                }
+            });
+
+            sdrcsccmd.SetHandler((namedgamut, iccfile, deviceProfile, outputProfile) =>
+            {
+                var srcgamut = RgbPrimaries.sRGB;
+                var srcdesc = "sRGB";
+                if (namedgamut.HasValue)
+                {
+                    (srcgamut, srcdesc) = namedgamut.Value switch
+                    {
+                        NamedGamut.sRGB => (RgbPrimaries.sRGB, "sRGB"),
+                        NamedGamut.AdobeRGB => (RgbPrimaries.AdobeRGB, "AdobeRGB"),
+                        NamedGamut.P3D65 => (RgbPrimaries.P3D65, "Display P3"), // tone response is fixed to sRGB, so it becomes Display P3
+                        NamedGamut.BT2020 => (RgbPrimaries.Rec2020, "BT2020"),
+                        _ => throw new ArgumentOutOfRangeException()
+                    };
+                }
+                else if (iccfile != null)
+                {
+                    var srcctx = new IccContext(IccProfile.Open(File.ReadAllBytes(iccfile)));
+                    srcgamut = srcctx.ProfilePrimaries;
+                    srcdesc = srcctx.GetDescription();
+                }
+
+                var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
+                var ctx = new DeviceIccContext(devicc);
+                var mhc2icc = ctx.CreateMhc2CscIcc(srcgamut, srcdesc);
+                File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
+                Console.WriteLine("Written profile {0}", outputProfile);
+            }, srcgamutoption, srcgamuticcoption, devprofarg, outprofarg);
+
+            sdracmcmd.SetHandler((calibrate, deviceProfile, outputProfile) =>
+            {
+                var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
+                var ctx = new DeviceIccContext(devicc);
+                var mhc2icc = ctx.CreateSdrAcmIcc(calibrate);
+                File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
+                Console.WriteLine("Written profile {0}", outputProfile);
+            }, calibtransopt, devprofarg, outprofarg);
+
+            hdrdecodecmd.SetHandler((deviceProfile, outputProfile) =>
+            {
+                var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
+                var ctx = new DeviceIccContext(devicc);
+                var mhc2icc = ctx.CreatePQ10DecodeIcc();
+                File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
+                Console.WriteLine("Written profile {0}", outputProfile);
+            }, devprofarg, outprofarg);
+
+            return rootcmd.Invoke(args);
         }
     }
 }

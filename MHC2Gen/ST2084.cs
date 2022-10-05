@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MHC2Gen.LittleCms
+namespace MHC2Gen
 {
     internal class ST2084
     {
@@ -14,7 +14,8 @@ namespace MHC2Gen.LittleCms
         private const double c2 = 32.0 * 2413.0 / 4096.0;
         private const double c3 = 32.0 * 2392.0 / 4096.0;
 
-        public static double NitsToSignal(double nits) {
+        public static double NitsToSignal(double nits)
+        {
             var Ypowm1 = Math.Pow(nits / 10000.0, m1);
             return Math.Pow((c1 + c2 * Ypowm1) / (1 + c3 * Ypowm1), m2);
         }
