@@ -217,6 +217,12 @@ MHC2Gen hdr-decode "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.31
 
 The wire signal is converted to SDR but still tagged HDR. This is tricky to use, you need to put Windows in HDR mode but display in SDR mode, possibly with EDID override and/or OSD settings.
 
+### Recommendations for creating device ICC profiles
+
+From [ledoge/novideo_srgb](https://github.com/ledoge/novideo_srgb), another LUT-matrix-LUT solution:
+
+> To achieve optimal results, consider creating a custom testchart in DisplayCAL with a high number of neutral (grayscale) patches, such as 256. With that, a grayscale calibration (setting "Tone curve" to anything other than "As measured") should be unnecessary unless your display lacks RGB gain controls, but can lead to better accuracy, especially on poorly behaved displays. The number of colored patches should not matter much. Additionally, configuring DisplayCAL to generate a "Curves + matrix" profile with "Black point compensation" disabled should also result in a lower average error than using an XYZ LUT profile. This advice is based on what worked well for a handful of users, so if you have anything else to add, please let me know.
+
 # Color-Managed Desktop Composition
 
 Advanced color, often referred to as HDR, is introduced in Windows 10. It performs color-managed composition in scRGB color space, and output to an HDR display in Rec. 2020 color space.
