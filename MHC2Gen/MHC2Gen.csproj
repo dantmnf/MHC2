@@ -9,10 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="MathNet.Numerics" Version="4.15.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
-    <PackageReference Include="System.IO.Packaging" Version="6.0.0" />
   </ItemGroup>
 
 	<PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '7.0'))">
@@ -21,7 +19,7 @@
 	</PropertyGroup>
 
 	<!-- Optimize for size -->
-	<PropertyGroup Condition="'$(UseNativeAot)' == 'true' and '$(Configuration)'=='Release'">
+	<PropertyGroup Condition="'$(UseNativeAot)' == 'true'">
 		<PublishAot>true</PublishAot>
 		<IlcOptimizationPreference>Size</IlcOptimizationPreference>
 		<IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
@@ -29,7 +27,7 @@
 		<TrimUnusedDependencies>true</TrimUnusedDependencies>
 		<RootPackageReference>false</RootPackageReference>
 		<TrimMode>full</TrimMode>
-		<DebuggerSupport Condition="'$(Configuration)'=='Release'">false</DebuggerSupport>
+		<!--DebuggerSupport Condition="'$(Configuration)'=='Release'">false</DebuggerSupport-->
 		<EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
 		<EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
 		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>

@@ -818,8 +818,8 @@ namespace LittleCms
 
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern IntPtr cmsIT8LoadFromMem(IntPtr ContextID, void* Ptr, uint len);
-        [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
-        public static extern IntPtr cmsIT8LoadFromIOhandler(IntPtr ContextID, IntPtr io);
+        //[DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
+        //public static extern IntPtr cmsIT8LoadFromIOhandler(IntPtr ContextID, IntPtr io);
 
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern bool cmsIT8SaveToMem(IntPtr hIT8, void* MemPtr, uint* BytesNeeded);

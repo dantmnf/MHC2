@@ -88,7 +88,7 @@ namespace MHC2Gen
         {
             if (profile.PCS != ColorSpaceSignature.XYZ || profile.ColorSpace != ColorSpaceSignature.Rgb)
             {
-                throw new FileFormatException("ICC profile is not XYZ->RGB");
+                throw new CmsException(CmsError.COLORSPACE_CHECK, "ICC profile is not XYZ->RGB");
             }
             this.profile = profile;
             var chad = profile.ReadTag<double[,]>(TagSignature.ChromaticAdaptation);

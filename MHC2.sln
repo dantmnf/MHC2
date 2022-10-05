@@ -15,7 +15,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lcms2_DLL", "lcms2\Projects
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CapsCheck", "CapsCheck\CapsCheck.csproj", "{6E33B605-57A3-44DE-9219-658CBC748E3B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleCms", "LittleCms\LittleCms.csproj", "{322A2B34-E405-484F-8B3A-83D41091EA82}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LittleCms", "LittleCms\LittleCms.csproj", "{322A2B34-E405-484F-8B3A-83D41091EA82}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,8 +33,8 @@ Global
 		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|Any CPU.Build.0 = Debug|x64
 		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|ARM64.ActiveCfg = Debug|ARM64
 		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|ARM64.Build.0 = Debug|ARM64
-		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|x64.Build.0 = Debug|Any CPU
+		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|x64.ActiveCfg = Debug|x64
+		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|x64.Build.0 = Debug|x64
 		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|x86.ActiveCfg = Debug|x86
 		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Debug|x86.Build.0 = Debug|x86
 		{DE14F93A-12D8-4937-9EE0-28EBEE1ED4EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
