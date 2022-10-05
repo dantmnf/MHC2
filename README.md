@@ -212,7 +212,7 @@ A proof-of-concept tool to generate MHC2-enabled ICC profiles can be found in [M
 ### Example 1: calibrate to sRGB in SDR mode
 
 ```
-MHC2Gen sdr-calib "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL CSC sRGB.icm"
+MHC2Gen sdr-csc "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL CSC sRGB.icm"
 ```
 
 ### Example 2: convert HDR10 to SDR in GPU
@@ -242,9 +242,14 @@ With supported hardware configuration (see below), a new setting will appear:
 
 To specify display characteristics, add an ICC profile with identity MHC2 tag for that display (don’t check “Add as Advanced Color Profile”).
 
+> 💡 Generate the profile with MHC2Gen:
+> ```
+> MHC2Gen sdr-acm "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL SDR ACM.icm"
+> ```
+
 As of version 22622.598, only `vcgt`, `lumi`, `MHC2` and primaries values in ICC profile are used. Extra calibration to sRGB (or gamma 2.2, see above) tone response via `vcgt` or `MHC2` regamma LUT is needed for optimal results.
 
-It is expected future releases will use more characteristics in ICC profile, and work without the `MHC2` tag.
+It is expected future releases will use more characteristics (preferably 3D LUT) in ICC profile, and work without the `MHC2` tag.
 
 ## Hardware Requirements
 
