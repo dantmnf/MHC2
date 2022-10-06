@@ -591,10 +591,13 @@ namespace MHC2Gen
 
             double[,] mhc2_lut;
 
+            ToneCurveTriple outproftrc;
+
             if (calibrateTransfer)
             {
                 var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
                 var sourceEotf = IccProfile.Create_sRGB().ReadTag<ToneCurve>(TagSignature.RedTRC)!;
+                outproftrc = new ToneCurveTriple(sourceEotf, sourceEotf, sourceEotf);
                 var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
                 var lut_size = 1024;
                 mhc2_lut = new double[3, lut_size];
@@ -615,9 +618,9 @@ namespace MHC2Gen
             }
             else
             {
+                outproftrc = new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve);
                 mhc2_lut = new double[,]{ { 0, 1 }, { 0, 1 }, { 0, 1 } };
             }
-
 
 
             var mhc2d = new MHC2Tag
@@ -636,11 +639,10 @@ namespace MHC2Gen
                 Red = devicePrimaries.Red.ToXYZ().ToCIExyY(),
                 Green = devicePrimaries.Green.ToXYZ().ToCIExyY(),
                 Blue = devicePrimaries.Blue.ToXYZ().ToCIExyY()
-            }, new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve));
+            }, outproftrc);
 
             // copy characteristics from device profile
             var copy_tags = new TagSignature[] {
-                TagSignature.Vcgt,
                 TagSignature.Luminance,
                 TagSignature.DeviceMfgDesc,
                 TagSignature.DeviceModelDesc,
@@ -650,6 +652,12 @@ namespace MHC2Gen
             {
                 var tag_ptr = profile.ReadTag(tag);
                 outputProfile.WriteTag(tag, tag_ptr);
+            }
+
+            // copy vcgt to output profile if it is not consumed
+            if (!calibrateTransfer)
+            {
+                outputProfile.WriteTag(TagSignature.Vcgt, profile.ReadTag(TagSignature.Vcgt));
             }
 
             // the profile is not read by regular applications
