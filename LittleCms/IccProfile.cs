@@ -300,17 +300,10 @@ namespace LittleCms
             set => cmsSetDeviceClass(Handle, value);
         }
 
-        public Version ProfileVersion
+        public double ProfileVersion
         {
-            get {
-                var encver = cmsGetEncodedICCversion(Handle);
-                return new((int)(encver >> 24), (int)((encver & 0x00F00000) >> 20), (int)((encver & 0x000F0000) >> 16));
-            }
-            set
-            {
-                var encver = (((uint)value.Major & 0xFF) << 24) | (((uint)value.Minor & 0xF) << 20) | (((uint)value.Build & 0xF) << 16);
-                cmsSetEncodedICCversion(Handle, encver);
-            }
+            get => cmsGetProfileVersion(Handle);
+            set => cmsSetProfileVersion(Handle, value);
         }
     }
 }

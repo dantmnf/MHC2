@@ -32,7 +32,7 @@
 		<EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
 		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
 		<InvariantGlobalization>true</InvariantGlobalization>
-		<UseSystemResourceKeys>true</UseSystemResourceKeys>
+		<!--UseSystemResourceKeys>true</UseSystemResourceKeys-->
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(UseNativeAot)' != 'true'">

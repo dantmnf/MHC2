@@ -560,8 +560,9 @@ namespace MHC2Gen
                 }
             }
 
-            var outctx = new IccContext(outputProfile);
-            outctx.WriteIlluminantRelativeMediaBlackPoint(illuminantRelativeBlackPoint);
+            // the profile is not read by regular applications
+            // var outctx = new IccContext(outputProfile);
+            // outctx.WriteIlluminantRelativeMediaBlackPoint(illuminantRelativeBlackPoint);
 
             // set output profile description
             outputProfile.HeaderManufacturer = profile.HeaderManufacturer;
@@ -591,13 +592,14 @@ namespace MHC2Gen
 
             double[,] mhc2_lut;
 
-            ToneCurveTriple outproftrc;
+            var outputprofileTrc = new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve);
+            var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
 
             if (calibrateTransfer)
             {
-                var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
                 var sourceEotf = IccProfile.Create_sRGB().ReadTag<ToneCurve>(TagSignature.RedTRC)!;
-                outproftrc = new ToneCurveTriple(sourceEotf, sourceEotf, sourceEotf);
+                outputprofileTrc = new ToneCurveTriple(sourceEotf, sourceEotf, sourceEotf);
+
                 var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
                 var lut_size = 1024;
                 mhc2_lut = new double[3, lut_size];
@@ -614,12 +616,27 @@ namespace MHC2Gen
                         }
                         mhc2_lut[ch, iinput] = dev_output;
                     }
+
+                }
+            }
+            else if (vcgt != null)
+            {
+                // move vcgt to mhc2 only
+                var lut_size = 1024;
+                mhc2_lut = new double[3, lut_size];
+                for (int ch = 0; ch < 3; ch++)
+                {
+                    for (int iinput = 0; iinput < lut_size; iinput++)
+                    {
+                        var input = (float)iinput / (lut_size - 1);
+                        var dev_output = vcgt[ch].EvalF32(input);
+                        mhc2_lut[ch, iinput] = dev_output;
+                    }
                 }
             }
             else
             {
-                outproftrc = new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve);
-                mhc2_lut = new double[,]{ { 0, 1 }, { 0, 1 }, { 0, 1 } };
+                mhc2_lut = new double[,] { { 0, 1 }, { 0, 1 }, { 0, 1 } };
             }
 
 
@@ -639,7 +656,7 @@ namespace MHC2Gen
                 Red = devicePrimaries.Red.ToXYZ().ToCIExyY(),
                 Green = devicePrimaries.Green.ToXYZ().ToCIExyY(),
                 Blue = devicePrimaries.Blue.ToXYZ().ToCIExyY()
-            }, outproftrc);
+            }, outputprofileTrc);
 
             // copy characteristics from device profile
             var copy_tags = new TagSignature[] {
@@ -652,12 +669,6 @@ namespace MHC2Gen
             {
                 var tag_ptr = profile.ReadTag(tag);
                 outputProfile.WriteTag(tag, tag_ptr);
-            }
-
-            // copy vcgt to output profile if it is not consumed
-            if (!calibrateTransfer)
-            {
-                outputProfile.WriteTag(TagSignature.Vcgt, profile.ReadTag(TagSignature.Vcgt));
             }
 
             // the profile is not read by regular applications
@@ -680,7 +691,7 @@ namespace MHC2Gen
             outputProfile.HeaderAttributes = profile.HeaderAttributes;
             outputProfile.HeaderRenderingIntent = profile.HeaderRenderingIntent;
 
-            outputProfile.ProfileVersion = profile.ProfileVersion;
+            // outputProfile.ProfileVersion = profile.ProfileVersion;
 
             var new_desc = $"SDR ACM: {profile.GetInfo(InfoType.Description)}";
             Console.WriteLine("Output profile description: " + new_desc);

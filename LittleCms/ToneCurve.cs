@@ -10,6 +10,21 @@ namespace LittleCms
     {
         public ToneCurve(IntPtr handle, bool moveOwnership) : base(handle, moveOwnership) { }
 
+        public ToneCurve(double gamma)
+        {
+            AttachObject(CheckError(cmsBuildGamma(IntPtr.Zero, gamma)), true);
+        }
+
+        public ToneCurve(ReadOnlySpan<float> table)
+        {
+            AttachObject(CheckError(cmsBuildTabulatedToneCurveFloat(IntPtr.Zero, (uint)table.Length, in table[0])), true);
+        }
+
+        public ToneCurve(ReadOnlySpan<ushort> table)
+        {
+            AttachObject(CheckError(cmsBuildTabulatedToneCurve16(IntPtr.Zero, (uint)table.Length, in table[0])), true);
+        }
+
         public static ToneCurve CopyFromObject(IntPtr copyFromObject) {
             var handle = CheckError(cmsDupToneCurve(copyFromObject));
             return new(handle, true);

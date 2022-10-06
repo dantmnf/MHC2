@@ -240,16 +240,16 @@ With supported hardware configuration (see below), a new setting will appear:
 
 ![][auto color management]
 
-To specify display characteristics, add an ICC profile with identity MHC2 tag for that display (don’t check “Add as Advanced Color Profile”).
+To specify display characteristics, add an ICC profile with MHC2 tag for that display (don’t check “Add as Advanced Color Profile”). If Windows thinks it is a valid profile, proper transform from composition space to device space will be set.
+
+As of version 22622.598, only `lumi`, `MHC2` and primaries values in a “valid” ICC profile are used (tone curves and `vcgt` are ignored). Extra calibration to sRGB (or gamma 2.2[^4]]) tone response via `MHC2` regamma LUT is needed for optimal results. However, with an “invalid” profile, `vcgt` will be applied.
 
 > 💡 Generate the profile with MHC2Gen:
 > ```
-> MHC2Gen sdr-acm "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL SDR ACM.icm"
+> MHC2Gen sdr-acm [--calibrate-transfer] "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL SDR ACM.icm"
 > ```
 
-As of version 22622.598, only `vcgt`, `lumi`, `MHC2` and primaries values in ICC profile are used. Extra calibration to sRGB (or gamma 2.2, see above) tone response via `vcgt` or `MHC2` regamma LUT is needed for optimal results.
-
-It is expected future releases will use more characteristics (preferably 3D LUT) in ICC profile, and work without the `MHC2` tag.
+It is expected future releases will use more characteristics like tone curves and probably PCS LUT in ICC profile, without the requirement of `MHC2` tag.
 
 ## Hardware Requirements
 
