@@ -16,7 +16,7 @@ As per documentation, an ICC profile with private extension (MHC ICC profile) is
 
 [MHC2Gen](MHC2Gen) is an experimental tool to generate MHC ICC profiles from existing ICC profile created with some random calibration solution.
 
-Currently, only profiles created with DisplayCAL is tested.
+Currently, only profiles created with DisplayCAL are tested.
 
 > 💡 The Windows calibration loader must be enabled to load `MHC2` transform.
 > > The last release of DisplayCAL calibration loader unconditionally disables a scheduled task of Windows calibration loader. You may need to re-enable `\Microsoft\Windows\WindowsColorSystem\Calibration Loader` for the profile to be loaded automatically after logout or reboot.
@@ -54,7 +54,7 @@ From [ledoge/novideo_srgb](https://github.com/ledoge/novideo_srgb), another LUT-
 
 # Notes for SDR Auto Color Management
 
-As of version 22622.598, only `lumi`, `MHC2` and primaries values in a “valid” MHC ICC profile are used (tone curves and `vcgt` are ignored). Extra calibration to sRGB (or gamma 2.2[^4]]) tone response via `MHC2` regamma LUT is needed for optimal results. However, with an “invalid” profile, `vcgt` will be applied.
+As of version 22622.598, only `lumi`, `MHC2` and primaries values in a “valid” MHC ICC profile are used (tone curves and `vcgt` are ignored). Extra calibration to sRGB (or gamma 2.2[^1]) tone response via `MHC2` regamma LUT is needed for optimal results. However, with an “invalid” profile, `vcgt` will be applied.
 
 It is expected future releases will use more characteristics like tone curves and probably PCS LUT in ICC profile, and preferably without the requirement of `MHC2` tag.
 
@@ -84,3 +84,5 @@ Replace it with [some][XDR] [professional][Creator Extreme] [display][HX310] (co
 [Creator Extreme]: https://www.lenovo.com/us/en/p/accessories-and-software/monitors/office/62a6rar3us
 [HX310]: https://pro.sony/ue_US/products/broadcastpromonitors/bvm-hx310
 [auto color management]: https://user-images.githubusercontent.com/2252500/194107647-788c3cab-6730-4728-b337-266ab9867481.png
+
+[^1]: Windows SDK headers suppose a gamma 2.2 transfer (`OUTPUT_WIRE_COLOR_SPACE_G22_P709`) but experiments show that assuming an sRGB transfer function gives better average delta-E on verification (this may vary on GPU vendor).
