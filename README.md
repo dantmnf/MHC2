@@ -22,6 +22,8 @@ Currently, only profiles created with DisplayCAL is tested.
 > > The last release of DisplayCAL calibration loader unconditionally disables a scheduled task of Windows calibration loader. You may need to re-enable `\Microsoft\Windows\WindowsColorSystem\Calibration Loader` for the profile to be loaded automatically after logout or reboot.
 
 
+⏬ **[Download latest release](https://github.com/dantmnf/MHC2/releases/tag/ci-build)**
+
 ## Example 1: sRGB proofing / clamp / emulation in SDR mode
 
 ```

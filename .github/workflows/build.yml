@@ -35,21 +35,21 @@ jobs:
       run: |
         cd MHC2Gen
         dotnet publish -c Release -r win-x64 -p:UseNativeAot=true -o bin\aot
-        tar caf MHC2Gen.zip -C bin\aot MHC2Gen.exe
-    - name: artifact
+        tar caf ..\MHC2Gen.zip -C bin\aot MHC2Gen.exe
+    - name: artifact bin
       uses: actions/upload-artifact@v1.0.0
       with:
         # Artifact name
         name: bin
         # Directory containing files to upload
-        path: bin
-    - name: artifact
+        path: MHC2Gen/bin
+    - name: artifact obj
       uses: actions/upload-artifact@v1.0.0
       with:
         # Artifact name
         name: obj
         # Directory containing files to upload
-        path: obj
+        path: MHC2Gen/obj
     - name: prerelease
       uses: "marvinpinto/action-automatic-releases@latest"
       with:
