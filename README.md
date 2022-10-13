@@ -26,11 +26,19 @@ Currently, only profiles created with DisplayCAL are tested.
 
 ## Example 1: sRGB proofing / clamp / emulation in SDR mode
 
+Matrix: [sRGB to XYZ] -> XYZ to sRGB -> sRGB (or some other custom gamut) to Device RGB -> sRGB to XYZ -> [XYZ to sRGB]
+
+LUT: vcgt(sRGB transfer to device transfer)
+
 ```
-MHC2Gen sdr-csc "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL CSC sRGB.icm"
+MHC2Gen sdr-csc [--source-gamut=<sRGB|AdobeRGB|P3D65|BT2020> | --source-gamut-icc=<icc file>] "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL CSC sRGB.icm"
 ```
 
-## Example 2: Generate profile for SDR Auto Color Management
+## Example 2: Create profile for SDR Auto Color Management
+
+Matrix: identity
+
+LUT: vcgt, or vcgt(sRGB transfer to device transfer) if `--calibrate-transfer` is specified
 
 ```
 MHC2Gen sdr-acm [--calibrate-transfer] "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL SDR ACM.icm"
@@ -38,8 +46,12 @@ MHC2Gen sdr-acm [--calibrate-transfer] "C:\...\DisplayCAL\storage\...\MODEL #1 2
 
 ## Example 3: Emulate HDR10 on SDR display
 
+Matrix: [BT2020 RGB to XYZ] -> XYZ to BT2020 RGB -> BT2020 RGB to Device RGB -> BT2020 RGB to XYZ -> [XYZ to BT2020 RGB]
+
+LUT: vcgt(device transfer evaluated with absolute luminance)
+
 ```
-MHC2Gen hdr-decode "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL PQ10 decode.icm"
+MHC2Gen hdr-decode [--min-nits=<override minimun luminance>] [--man-nits=<override maximum luminance>] "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL PQ10 decode.icm"
 ```
 
 The wire signal is converted to SDR but still tagged HDR. This is tricky to use, you need to put Windows in HDR mode but display in SDR mode, possibly with EDID override and/or OSD settings.
