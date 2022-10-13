@@ -494,7 +494,7 @@ namespace MHC2Gen
             return outputProfile;
         }
 
-        public IccProfile CreatePQ10DecodeIcc()
+        public IccProfile CreatePQ10DecodeIcc(double? maxBrightnessOverride = null, double? minBrightnessOverride = null)
         {
             var sourcePrimaries = RgbPrimaries.Rec2020;
             var devicePrimaries = ProfilePrimaries;
@@ -513,6 +513,9 @@ namespace MHC2Gen
             var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
+            var use_max_nits = maxBrightnessOverride ?? max_nits;
+            var use_min_nits = minBrightnessOverride ?? min_nits;
+
             var lut_size = 4096;
             var mhc2_lut = new double[3, 4096];
             for (int ch = 0; ch < 3; ch++)
@@ -521,7 +524,7 @@ namespace MHC2Gen
                 {
                     var pqinput = (double)iinput / (lut_size - 1);
                     var nits = ST2084.SignalToNits(pqinput);
-                    var linear = Math.Max(nits - min_nits, 0) / (max_nits - min_nits);
+                    var linear = Math.Max(nits - use_min_nits, 0) / (use_max_nits - use_min_nits);
                     var dev_output = deviceOetf[ch].EvalF32((float)linear);
                     if (vcgt != null)
                     {
@@ -534,8 +537,8 @@ namespace MHC2Gen
 
             var mhc2d = new MHC2Tag
             {
-                MinCLL = min_nits,
-                MaxCLL = max_nits,
+                MinCLL = use_min_nits,
+                MaxCLL = use_max_nits,
                 Matrix3x4 = mhc2_matrix,
                 RegammaLUT = mhc2_lut
             };
@@ -550,7 +553,7 @@ namespace MHC2Gen
             }, new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve));
 
             // copy characteristics from device profile
-            var copy_tags = new TagSignature[] { TagSignature.Luminance, TagSignature.DeviceMfgDesc, TagSignature.DeviceModelDesc };
+            var copy_tags = new TagSignature[] { TagSignature.DeviceMfgDesc, TagSignature.DeviceModelDesc };
             foreach (var tag in copy_tags)
             {
                 var tag_ptr = profile.ReadTag(tag);
@@ -559,6 +562,8 @@ namespace MHC2Gen
                     outputProfile.WriteTag(tag, tag_ptr);
                 }
             }
+
+            outputProfile.WriteTag(TagSignature.Luminance, new CIEXYZ { Y = use_max_nits });
 
             // the profile is not read by regular applications
             // var outctx = new IccContext(outputProfile);
@@ -570,7 +575,7 @@ namespace MHC2Gen
             outputProfile.HeaderAttributes = profile.HeaderAttributes;
             outputProfile.HeaderRenderingIntent = RenderingIntent.ABSOLUTE_COLORIMETRIC;
 
-            var new_desc = $"CSC: HDR10 to SDR ({GetDeviceDescription()})";
+            var new_desc = $"CSC: HDR10 to SDR ({GetDeviceDescription()}, {use_max_nits:0} nits)";
             Console.WriteLine("Output profile description: " + new_desc);
             var new_desc_mlu = new MLU(new_desc);
             outputProfile.WriteTag(TagSignature.ProfileDescription, new_desc_mlu);

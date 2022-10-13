@@ -27,6 +27,9 @@ namespace MHC2Gen
 
             var calibtransopt = new Option<bool>("--calibrate-transfer", "calibrate output transfer to sRGB");
 
+            var minnitsopt = new Option<double?>("--min-nits", "override minimum brightness nits");
+            var maxnitsopt = new Option<double?>("--max-nits", "override maximum brightness nits");
+
             var devprofarg = new Argument<string>("device profile");
             var outprofarg = new Argument<string>("output profile");
 
@@ -42,7 +45,7 @@ namespace MHC2Gen
 
             var hdrdecodecmd = new Command("hdr-decode", "create a matrix-LUT profile to convert Windows HDR10 output to SDR (hard clip, no tone mapping)")
             {
-                outprofdescopt, outprofveropt, devprofarg, outprofarg
+                outprofdescopt, outprofveropt, minnitsopt, maxnitsopt, devprofarg, outprofarg
             };
 
             var rootcmd = new RootCommand()
@@ -98,15 +101,15 @@ namespace MHC2Gen
                 Console.WriteLine("Written profile {0}", outputProfile);
             }, calibtransopt, devprofarg, outprofarg, outprofdescopt, outprofveropt);
 
-            hdrdecodecmd.SetHandler((deviceProfile, outputProfile, profdesc, profver) =>
+            hdrdecodecmd.SetHandler((deviceProfile, outputProfile, profdesc, profver, minnits, maxnits) =>
             {
                 var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
                 var ctx = new DeviceIccContext(devicc);
-                var mhc2icc = ctx.CreatePQ10DecodeIcc();
+                var mhc2icc = ctx.CreatePQ10DecodeIcc(maxnits, minnits);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
                 Console.WriteLine("Written profile {0}", outputProfile);
-            }, devprofarg, outprofarg, outprofdescopt, outprofveropt);
+            }, devprofarg, outprofarg, outprofdescopt, outprofveropt, minnitsopt, maxnitsopt);
 
             try
             {
