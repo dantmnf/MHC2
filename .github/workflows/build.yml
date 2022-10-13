@@ -16,6 +16,7 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 7.x
+        include-prerelease: true
     - name: build Little CMS
       shell: cmd
       run: |
