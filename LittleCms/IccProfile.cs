@@ -114,12 +114,21 @@ namespace LittleCms
 
         public void WriteTag(TagSignature sig, IntPtr handle)
         {
-            CheckError(cmsWriteTag(Handle, sig, handle));
+            var result = cmsWriteTag(Handle, sig, handle);
+            // suppress failure of deleting non-existent tag
+            if (handle != IntPtr.Zero) CheckError(result);
         }
 
-        public void WriteTag(TagSignature sig, CmsObject obj)
+        public void WriteTag(TagSignature sig, CmsObject? obj)
         {
-            WriteTag(sig, obj.Handle);
+            if (obj is null)
+            {
+                WriteTag(sig, IntPtr.Zero);
+            }
+            else
+            {
+                WriteTag(sig, obj.Handle);
+            }
         }
 
         public unsafe void WriteTag(TagSignature sig, double[,] chad)
