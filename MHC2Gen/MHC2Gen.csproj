@@ -23,7 +23,7 @@
 		<PublishAot>true</PublishAot>
 		<IlcOptimizationPreference>Size</IlcOptimizationPreference>
 		<IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
-		<IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+		<IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
 		<TrimUnusedDependencies>true</TrimUnusedDependencies>
 		<RootPackageReference>false</RootPackageReference>
 		<TrimMode>full</TrimMode>
