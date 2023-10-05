@@ -8,22 +8,33 @@ namespace LittleCms.Data
 {
     public class ToneCurve : CmsObject
     {
+#pragma warning disable CS0809
+        [Obsolete("lcms2 don't expose API to get context of cmsToneCurve")]
+        public override CmsContext Context => throw new NotImplementedException();
+#pragma warning restore CS0809
+
         public ToneCurve(nint handle, bool moveOwnership) : base(handle, moveOwnership) { }
 
-        public ToneCurve(double gamma)
+        public ToneCurve(CmsContext context, double gamma)
         {
-            AttachObject(CheckError(cmsBuildGamma(nint.Zero, gamma)), true);
+            AttachObject(CheckError(cmsBuildGamma(context.Handle, gamma)), true);
         }
 
-        public ToneCurve(ReadOnlySpan<float> table)
+        public ToneCurve(CmsContext context, ReadOnlySpan<float> table)
         {
-            AttachObject(CheckError(cmsBuildTabulatedToneCurveFloat(nint.Zero, (uint)table.Length, in table[0])), true);
+            AttachObject(CheckError(cmsBuildTabulatedToneCurveFloat(context.Handle, (uint)table.Length, in table[0])), true);
         }
 
-        public ToneCurve(ReadOnlySpan<ushort> table)
+        public ToneCurve(CmsContext context, ReadOnlySpan<ushort> table)
         {
-            AttachObject(CheckError(cmsBuildTabulatedToneCurve16(nint.Zero, (uint)table.Length, in table[0])), true);
+            AttachObject(CheckError(cmsBuildTabulatedToneCurve16(context.Handle, (uint)table.Length, in table[0])), true);
         }
+
+        public ToneCurve(double gamma) : this(CmsContext.Default, gamma) { }
+
+        public ToneCurve(ReadOnlySpan<float> table) : this(CmsContext.Default, table) { }
+
+        public ToneCurve(ReadOnlySpan<ushort> table) : this(CmsContext.Default, table) { }
 
         public static ToneCurve CopyFromObject(nint copyFromObject)
         {

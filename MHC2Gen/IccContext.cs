@@ -80,10 +80,10 @@ namespace MHC2Gen
     internal class IccContext
     {
         protected IccProfile profile;
-        public CIEXYZ IlluminantRelativeWhitePoint { get; private set; }
+        public CIEXYZ IlluminantRelativeWhitePoint { get; }
         public Matrix<double>? ChromaticAdaptionMatrix { get; }
         public Matrix<double>? InverseChromaticAdaptionMatrix { get; }
-        public RgbPrimaries ProfilePrimaries { get; private set; }
+        public RgbPrimaries ProfilePrimaries { get; }
 
         public IccContext(IccProfile profile)
         {
@@ -97,7 +97,7 @@ namespace MHC2Gen
                 ChromaticAdaptionMatrix = DenseMatrix.OfArray(chad);
                 InverseChromaticAdaptionMatrix = ChromaticAdaptionMatrix.Inverse();
             }
-            PopulatePrimaries();
+            (IlluminantRelativeWhitePoint, ProfilePrimaries) = PopulatePrimaries();
         }
 
 
@@ -146,7 +146,7 @@ namespace MHC2Gen
         /// <summary>
         /// use lcms transform to get illuminant-relative primaries.
         /// </summary>
-        private unsafe void PopulatePrimaries()
+        private unsafe (CIEXYZ, RgbPrimaries) PopulatePrimaries()
         {
             var ctx = new CmsContext();
 
@@ -173,8 +173,7 @@ namespace MHC2Gen
             var wXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
 
 
-            IlluminantRelativeWhitePoint = wXYZ;
-            ProfilePrimaries = new(rXYZ.ToXY(), gXYZ.ToXY(), bXYZ.ToXY(), wXYZ.ToXY());
+            return (wXYZ, new(rXYZ.ToXY(), gXYZ.ToXY(), bXYZ.ToXY(), wXYZ.ToXY()));
 
         }
 
