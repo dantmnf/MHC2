@@ -9,6 +9,7 @@ using System.Buffers.Binary;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using System.Runtime.InteropServices;
+using LittleCms.Data;
 
 namespace MHC2Gen
 {
@@ -174,8 +175,6 @@ namespace MHC2Gen
 
             IlluminantRelativeWhitePoint = wXYZ;
             ProfilePrimaries = new(rXYZ.ToXY(), gXYZ.ToXY(), bXYZ.ToXY(), wXYZ.ToXY());
-            var ir_bXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, d50_bXYZ);
-            return new(ir_rXYZ.ToXY(), ir_gXYZ.ToXY(), ir_bXYZ.ToXY(), ir_wtpt.ToXY());
 
         }
 
@@ -226,6 +225,26 @@ namespace MHC2Gen
             }
             profile.WriteTag(SafeTagSignature.MediaBlackPointTag, valueToWrite);
         }
+
+        public static Matrix<double> GetChromaticAdaptationMatrix(CIEXYZ sourceIlluminant, CIEXYZ targetIlluminant)
+        {
+            // http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
+            // Bradford
+            var M_a = DenseMatrix.OfArray(new[,] {
+                { 0.8951, 0.2664, -0.1614 },
+                { -0.7502, 1.7135, 0.0367 },
+                { 0.0389, -0.0685, 1.0296 },
+            });
+
+            var M_a_inv = M_a.Inverse();
+
+            var cone_s_vec = M_a * new DenseVector(new double[] { sourceIlluminant.X, sourceIlluminant.Y, sourceIlluminant.Z });
+            var cone_t_vec = M_a * new DenseVector(new double[] { targetIlluminant.X, targetIlluminant.Y, targetIlluminant.Z });
+
+            var M = M_a_inv * DenseMatrix.Build.DenseOfDiagonalVector(cone_t_vec / cone_s_vec) * M_a;
+
+            return M;
+        }
     }
 
     internal class DeviceIccContext : IccContext
@@ -239,6 +258,8 @@ namespace MHC2Gen
         ToneCurve profileRedReverseToneCurve;
         ToneCurve profileGreenReverseToneCurve;
         ToneCurve profileBlueReverseToneCurve;
+
+        public bool UseChromaticAdaptation { get; set; }
 
         public DeviceIccContext(IccProfile profile) : base(profile)
         {
@@ -325,33 +346,42 @@ namespace MHC2Gen
 
             var srgb_to_xyz = RgbToXYZ(RgbPrimaries.sRGB);
             var xyz_to_srgb = XYZToRgb(RgbPrimaries.sRGB);
-            var source_rgb_to_device_rgb = XYZToRgb(devicePrimaries) * RgbToXYZ(sourcePrimaries);
 
-            // max luminance after CSC
-            var source_white_to_device_rgb = source_rgb_to_device_rgb * new DenseVector(new double[] { 1, 1, 1 });
-            var source_white_to_device_xyz = RgbToXYZ(devicePrimaries) * source_white_to_device_rgb;
-            var mapped_y = source_white_to_device_xyz[1];
+
+            Matrix<double> user_matrix = DenseMatrix.CreateIdentity(3);
+
+            // pipeline here: input signal converted to XYZ (interpreted as sRGB)
+
+            if (!ReferenceEquals(sourcePrimaries, RgbPrimaries.sRGB))
+            {
+                user_matrix = RgbToXYZ(sourcePrimaries) * xyz_to_srgb * user_matrix;
+            }
+
+            // pipeline here: input signal converted to XYZ (interpreted as custom RGB)
+
+            if (UseChromaticAdaptation)
+            {
+                user_matrix = GetChromaticAdaptationMatrix(sourcePrimaries.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+            }
+
+            // pipeline here: input signal XYZ adapted to device white point
+
+            // hook: scale white point
+
+            var source_white_to_xyz = user_matrix * new DenseVector(new double[] { 1, 1, 1 });
+            var mapped_y = source_white_to_xyz[1];
             var profile_max_nits = max_nits * (mapped_y / wtpt.Y);
             Console.WriteLine($"mapped max luminance: {profile_max_nits} cd/m2");
 
-            // MHC2 matrix pipeline:
-            // transformed_linear_rgb = xyz_to_srgb * user_matrix * srgb_to_xyz * linear_rgb
-            // to eliminate unnecessary sRGB/XYZ transform, use
-            // user_matrix = srgb_to_xyz * real_user_rgb_to_rgb_matrix * xyz_to_srgb
+            // end hook
 
-            var user_matrix = srgb_to_xyz * source_rgb_to_device_rgb * xyz_to_srgb;
+            user_matrix = XYZToRgb(devicePrimaries) * user_matrix;
 
+            // pipeline here: linear device RGB
 
-            if (ReferenceEquals(sourcePrimaries, RgbPrimaries.sRGB))
-            {
-                // eliminate redundant sRGB/XYZ transform for better precision
-                // user_matrix = srgb_to_xyz * real_user_rgb_to_rgb_matrix * xyz_to_srgb
-                // real_user_rgb_to_rgb_matrix = xyz_to_device_rgb * srgb_to_xyz
-                // user_matrix = srgb_to_xyz * xyz_to_device_rgb * (srgb_to_xyz * xyz_to_srgb)
-                //             = srgb_to_xyz * xyz_to_device_rgb * I
-                //             = srgb_to_xyz * xyz_to_device_rgb
-                user_matrix = srgb_to_xyz * XYZToRgb(devicePrimaries);
-            }
+            // hack: eliminate fixed sRGB to XYZ transform
+
+            user_matrix = srgb_to_xyz * user_matrix;
 
             var mhc2_matrix = new double[,] {
                { user_matrix[0,0], user_matrix[0,1], user_matrix[0,2], 0 },
@@ -416,14 +446,14 @@ namespace MHC2Gen
 
             unsafe
             {
-            foreach (var tag in copy_tags)
-            {
-                var tag_ptr = profile.ReadTag(tag);
-                    if (tag_ptr != null)
+                foreach (var tag in copy_tags)
                 {
-                    outputProfile.WriteTag(tag, tag_ptr);
+                    var tag_ptr = profile.ReadTag(tag);
+                    if (tag_ptr != null)
+                    {
+                        outputProfile.WriteTag(tag, tag_ptr);
+                    }
                 }
-            }
             }
 
             // set output profile description
@@ -449,15 +479,24 @@ namespace MHC2Gen
             var sourcePrimaries = RgbPrimaries.Rec2020;
             var devicePrimaries = ProfilePrimaries;
 
+            Matrix<double> user_matrix = DenseMatrix.CreateIdentity(3);
+
+
+            if (UseChromaticAdaptation)
+            {
+                user_matrix = GetChromaticAdaptationMatrix(sourcePrimaries.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+            }
+
+
             // var rgb_transform = RgbToRgb(sourcePrimaries, devicePrimaries);
             // rgb_transform = XYZToRgb(devicePrimaries) * RgbToXYZ(sourcePrimaries);
             // var xyz_transform = RgbToXYZ(sourcePrimaries) * rgb_transform * XYZToRgb(sourcePrimaries);
-            var xyz_transform = RgbToXYZ(sourcePrimaries) * XYZToRgb(devicePrimaries);
+            user_matrix = RgbToXYZ(sourcePrimaries) * XYZToRgb(devicePrimaries) * user_matrix;
 
             var mhc2_matrix = new double[,] {
-               { xyz_transform[0,0], xyz_transform[0,1], xyz_transform[0,2], 0 },
-               { xyz_transform[1,0], xyz_transform[1,1], xyz_transform[1,2], 0 },
-               { xyz_transform[2,0], xyz_transform[2,1], xyz_transform[2,2], 0 },
+               { user_matrix[0,0], user_matrix[0,1], user_matrix[0,2], 0 },
+               { user_matrix[1,0], user_matrix[1,1], user_matrix[1,2], 0 },
+               { user_matrix[2,0], user_matrix[2,1], user_matrix[2,2], 0 },
             };
 
             var vcgt = profile.ReadTagOrDefault(SafeTagSignature.VcgtTag)?.ToArray();
@@ -506,14 +545,14 @@ namespace MHC2Gen
             var copy_tags = new TagSignature[] { TagSignature.DeviceMfgDescTag, TagSignature.DeviceModelDescTag };
             unsafe
             {
-            foreach (var tag in copy_tags)
-            {
-                var tag_ptr = profile.ReadTag(tag);
-                    if (tag_ptr != null)
+                foreach (var tag in copy_tags)
                 {
-                    outputProfile.WriteTag(tag, tag_ptr);
+                    var tag_ptr = profile.ReadTag(tag);
+                    if (tag_ptr != null)
+                    {
+                        outputProfile.WriteTag(tag, tag_ptr);
+                    }
                 }
-            }
             }
 
             outputProfile.WriteTag(SafeTagSignature.LuminanceTag, new CIEXYZ { Y = use_max_nits });
@@ -542,10 +581,17 @@ namespace MHC2Gen
 
         public IccProfile CreateSdrAcmIcc(bool calibrateTransfer)
         {
+            Matrix<double> user_matrix = DenseMatrix.CreateIdentity(3);
+
+            if (UseChromaticAdaptation)
+            {
+                user_matrix = GetChromaticAdaptationMatrix(new CIExy { x = 0.3127, y = 0.3290 }.ToXYZ(), ProfilePrimaries.White.ToXYZ()) * user_matrix;
+            }
+
             var mhc2_matrix = new double[,] {
-               { 1, 0, 0, 0 },
-               { 0, 1, 0, 0 },
-               { 0, 0, 1, 0 },
+               { user_matrix[0,0], user_matrix[0,1], user_matrix[0,2], 0 },
+               { user_matrix[1,0], user_matrix[1,1], user_matrix[1,2], 0 },
+               { user_matrix[2,0], user_matrix[2,1], user_matrix[2,2], 0 },
             };
 
             double[,] mhc2_lut;
@@ -625,11 +671,11 @@ namespace MHC2Gen
 
             unsafe
             {
-            foreach (var tag in copy_tags)
-            {
-                var tag_ptr = profile.ReadTag(tag);
-                outputProfile.WriteTag(tag, tag_ptr);
-            }
+                foreach (var tag in copy_tags)
+                {
+                    var tag_ptr = profile.ReadTag(tag);
+                    outputProfile.WriteTag(tag, tag_ptr);
+                }
             }
 
             // the profile is not read by regular applications
