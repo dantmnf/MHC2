@@ -1,6 +1,7 @@
 <Project>
-  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(SolutionDir)', '$(MSBuildProjectDirectory)./').StartsWith('lcms2\'))">
-    <OutDir>$(Configuration)/$(Platform)/</OutDir>
-    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB8012</MSBuildWarningsAsMessages>
-  </PropertyGroup>
+  <Target Name="CopyLcms2Binary" AfterTargets="Build" Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)./').StartsWith('lcms2\'))">
+    <Copy SourceFiles="$(OutDir)$(TargetName).lib" DestinationFolder="$(Configuration)/$(Platform)/" Condition="'$(ConfigurationType)' == 'StaticLibrary'" />
+    <Copy SourceFiles="$(OutDir)$(TargetName).dll" DestinationFolder="$(Configuration)/$(Platform)/" Condition="'$(ConfigurationType)' == 'DynamicLibrary'" />
+    <Copy SourceFiles="$(OutDir)$(TargetName).pdb" DestinationFolder="$(Configuration)/$(Platform)/" />
+  </Target>
 </Project>
