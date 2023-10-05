@@ -1,21 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-
+using LittleCms.Data;
 using static LittleCms.CmsNative;
 
 namespace LittleCms
 {
     public class IccProfile : CmsObject
     {
-        public IccProfile(IntPtr handle, bool moveOwnership) : base(handle, moveOwnership) { }
+        public override CmsContext Context { get; }
+
+        public IccProfile(IntPtr handle, bool moveOwnership) : base(handle, moveOwnership)
+        {
+            Context = CmsContext.GetFromHandle(cmsGetProfileContextID(handle));
+        }
+        public IccProfile(IntPtr handle, CmsContext context) : base(handle, true)
+        {
+            Context = context;
+        }
+
+        public static IccProfile Create_sRGB(CmsContext context)
+        {
+            return new IccProfile(CheckError(cmsCreate_sRGBProfileTHR(context.Handle)), true);
+        }
 
         public static IccProfile Create_sRGB()
         {
             return new IccProfile(CheckError(cmsCreate_sRGBProfile()), true);
+        }
+
+        public static IccProfile CreateXYZ(CmsContext context)
+        {
+            return new IccProfile(CheckError(cmsCreateXYZProfileTHR(context.Handle)), true);
         }
 
         public static IccProfile CreateXYZ()
@@ -23,20 +45,28 @@ namespace LittleCms
             return new IccProfile(CheckError(cmsCreateXYZProfile()), true);
         }
 
-        public static unsafe IccProfile CreateRGB(CIExyY whitepoint, CIExyYTRIPLE primaries, ToneCurveTriple transfer)
+        public static IccProfile CreateRGB(CIExyY whitepoint, CIExyYTRIPLE primaries, RgbToneCurve transfer)
+        {
+            return CreateRGB(CmsContext.Default, whitepoint, primaries, transfer);
+        }
+
+        public static unsafe IccProfile CreateRGB(CmsContext context, CIExyY whitepoint, CIExyYTRIPLE primaries, RgbToneCurve transfer)
         {
             Span<IntPtr> transferhandle = stackalloc IntPtr[] { transfer.Red.Handle, transfer.Green.Handle, transfer.Blue.Handle };
             var handle = CheckError(cmsCreateRGBProfile(whitepoint, primaries, ref transferhandle[0]));
             return new(handle, true);
         }
-        public static unsafe IccProfile Open(ReadOnlySpan<byte> bytes)
+
+        public static unsafe IccProfile Open(CmsContext context, ReadOnlySpan<byte> bytes)
         {
             fixed (byte* ptr = bytes)
             {
-                var handle = CheckError(cmsOpenProfileFromMem(ptr, (uint)bytes.Length));
-                return new IccProfile(handle, true);
+                var handle = CheckError(cmsOpenProfileFromMemTHR(context.Handle, ptr, (uint)bytes.Length));
+                return new IccProfile(handle, context);
             }
         }
+        public static IccProfile Open(ReadOnlySpan<byte> bytes) => Open(CmsContext.Default, bytes);
+
 
         public unsafe byte[] GetBytes()
         {
@@ -53,152 +83,62 @@ namespace LittleCms
             cmsCloseProfile(Handle);
         }
 
-        public IntPtr ReadTag(TagSignature sig)
+        public unsafe void* ReadTag(TagSignature sig)
         {
             return cmsReadTag(Handle, sig);
         }
 
-        public bool ContainsTag(TagSignature sig) => ReadTag(sig) != IntPtr.Zero;
+        public unsafe bool ContainsTag(TagSignature sig) => ReadTag(sig) != null;
 
-        public unsafe T? ReadTag<T>(TagSignature sig)
+        public T ReadTag<T>(ISafeTagSignature<T> sig)
         {
-            var ptr = cmsReadTag(Handle, sig);
-            if (ptr == IntPtr.Zero) return default;
-            switch (sig)
+            return sig.ReadFromProfile(this);
+        }
+
+        [return: NotNullIfNotNull(nameof(defaultValue))]
+        public T? ReadTagOrDefault<T>(ISafeTagSignature<T> sig, T? defaultValue = default)
+        {
+            try
             {
-                case TagSignature.Chromaticity:
-                    return (T?)(object)(*(CIExyYTRIPLE*)ptr);
-                case TagSignature.MediaWhitePoint:
-                case TagSignature.BlueColorant:
-                case TagSignature.GreenColorant:
-                case TagSignature.Luminance:
-                case TagSignature.MediaBlackPoint:
-                case TagSignature.RedColorant:
-                    return (T?)(object)(*(CIEXYZ*)ptr);
-                case TagSignature.ChromaticAdaptation:
-                    {
-                        var result = new double[3, 3];
-                        new ReadOnlySpan<double>((double*)ptr, 9).CopyTo(MemoryMarshal.CreateSpan(ref result[0, 0], 9));
-                        return (T?)(object)result;
-                    }
-                case TagSignature.Data:
-                case TagSignature.Ps2CRD0:
-                case TagSignature.Ps2CRD1:
-                case TagSignature.Ps2CRD2:
-                case TagSignature.Ps2CRD3:
-                case TagSignature.Ps2CSA:
-                case TagSignature.Ps2RenderingIntent:
-                    return (T?)(object)_ICCData.ToManaged((_ICCData*)ptr);
-                case TagSignature.BlueTRC:
-                case TagSignature.GrayTRC:
-                case TagSignature.GreenTRC:
-                case TagSignature.RedTRC:
-                    return (T?)(object)ToneCurve.CopyFromObject(ptr);
-                case TagSignature.Vcgt:
-                    {
-                        var curves = (IntPtr*)ptr;
-                        return (T?)(object)new ToneCurveTriple(ToneCurve.CopyFromObject(curves[0]), ToneCurve.CopyFromObject(curves[1]), ToneCurve.CopyFromObject(curves[2]));
-                    }
-                case TagSignature.CharTarget:
-                case TagSignature.Copyright:
-                case TagSignature.DeviceMfgDesc:
-                case TagSignature.DeviceModelDesc:
-                case TagSignature.ProfileDescription:
-                case TagSignature.ScreeningDesc:
-                case TagSignature.ViewingCondDesc:
-                    return (T?)(object)MLU.CopyFromObject(ptr);
-                default:
-                    throw new NotImplementedException();
+                return sig.ReadFromProfile(this);
+            }
+            catch (TagNotFoundException)
+            {
+                return defaultValue;
             }
         }
 
-        public void WriteTag(TagSignature sig, IntPtr handle)
+        public bool TryReadTag<T>(ISafeTagSignature<T> sig, [NotNullWhen(returnValue: true)] out T? value)
         {
-            var result = cmsWriteTag(Handle, sig, handle);
-            // suppress failure of deleting non-existent tag
-            if (handle != IntPtr.Zero) CheckError(result);
-        }
-
-        public void WriteTag(TagSignature sig, CmsObject? obj)
-        {
-            if (obj is null)
-            {
-                WriteTag(sig, IntPtr.Zero);
+            try { 
+                value = sig.ReadFromProfile(this)!;
+                return true;
             }
-            else
+            catch (TagNotFoundException)
             {
-                WriteTag(sig, obj.Handle);
+                value = default;
+                return false;
             }
         }
 
-        public unsafe void WriteTag(TagSignature sig, double[,] chad)
+        public unsafe void WriteTag(TagSignature sig, void* handle)
         {
-            if (sig != TagSignature.ChromaticAdaptation) throw new ArgumentException();
-            fixed (double* ptr = &chad[0, 0])
-                WriteTag(sig, (IntPtr)ptr);
+            CheckError(cmsWriteTag(Handle, sig, handle));
         }
 
-        public unsafe void WriteTag(TagSignature sig, in CIEXYZ xyz)
+        public void WriteTag<T>(ISafeTagSignature<T> sig, T value)
         {
-            switch (sig)
-            {
-                case TagSignature.MediaWhitePoint:
-                case TagSignature.BlueColorant:
-                case TagSignature.GreenColorant:
-                case TagSignature.Luminance:
-                case TagSignature.MediaBlackPoint:
-                case TagSignature.RedColorant:
-                    break;
-                default:
-                    throw new ArgumentException();
-            }
-            fixed (void* ptr = &xyz)
-            {
-                WriteTag(sig, (IntPtr)ptr);
-            }
+            sig.WriteToProfile(this, value);
         }
 
-        public unsafe void WriteTag(TagSignature sig, in CIExyYTRIPLE xyy3)
+        public unsafe void RemoveTag(TagSignature sig)
         {
-            if (sig != TagSignature.Chromaticity) throw new ArgumentException();
-            fixed (void* ptr = &xyy3)
-            {
-                WriteTag(sig, (IntPtr)ptr);
-            }
+            CheckError(cmsWriteTag(Handle, sig, null));
         }
 
-        public unsafe void WriteTag(TagSignature sig, in ICCData obj)
+        public unsafe void RemoveTag<T>(ISafeTagSignature<T> sig)
         {
-            switch (sig)
-            {
-                case TagSignature.Data:
-                case TagSignature.Ps2CRD0:
-                case TagSignature.Ps2CRD1:
-                case TagSignature.Ps2CRD2:
-                case TagSignature.Ps2CRD3:
-                case TagSignature.Ps2CSA:
-                case TagSignature.Ps2RenderingIntent:
-                    break;
-                default:
-                    throw new ArgumentException();
-            }
-            var data = new byte[sizeof(_ICCDataHeader) + obj.Data.Length];
-            obj.Data.Span.CopyTo(data.AsSpan().Slice(sizeof(_ICCDataHeader)));
-            fixed (byte* ptr = data)
-            {
-                var header = (_ICCDataHeader*)ptr;
-                header->flag = obj.Flag;
-                header->len = (uint)obj.Data.Length;
-
-                WriteTag(sig, (IntPtr)ptr);
-            }
-        }
-
-        public unsafe void WriteTag(TagSignature sig, in ToneCurveTriple obj)
-        {
-            if (sig != TagSignature.Vcgt) throw new ArgumentException();
-            var handles = stackalloc IntPtr[] { obj.Red.Handle, obj.Green.Handle, obj.Blue.Handle };
-            WriteTag(sig, (IntPtr)handles);
+            CheckError(cmsWriteTag(Handle, sig.TagSignature, null));
         }
 
         public unsafe byte[]? ReadRawTag(TagSignature sig)

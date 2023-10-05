@@ -10,6 +10,9 @@ namespace LittleCms
         public IntPtr Handle => handle;
         public bool IsOwner => isOwner;
 
+        public abstract CmsContext Context { get; }
+
+
         protected CmsObject() { }
 
         protected CmsObject(IntPtr handle, bool moveOwnership)

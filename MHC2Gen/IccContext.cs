@@ -79,10 +79,10 @@ namespace MHC2Gen
     internal class IccContext
     {
         protected IccProfile profile;
-        public CIEXYZ IlluminantRelativeWhitePoint { get; }
+        public CIEXYZ IlluminantRelativeWhitePoint { get; private set; }
         public Matrix<double>? ChromaticAdaptionMatrix { get; }
         public Matrix<double>? InverseChromaticAdaptionMatrix { get; }
-        public RgbPrimaries ProfilePrimaries { get; }
+        public RgbPrimaries ProfilePrimaries { get; private set; }
 
         public IccContext(IccProfile profile)
         {
@@ -91,32 +91,28 @@ namespace MHC2Gen
                 throw new CmsException(CmsError.COLORSPACE_CHECK, "ICC profile is not XYZ->RGB");
             }
             this.profile = profile;
-            var chad = profile.ReadTag<double[,]>(TagSignature.ChromaticAdaptation);
-            if (chad != null)
+            if (profile.TryReadTag(SafeTagSignature.ChromaticAdaptationTag, out var chad))
             {
                 ChromaticAdaptionMatrix = DenseMatrix.OfArray(chad);
                 InverseChromaticAdaptionMatrix = ChromaticAdaptionMatrix.Inverse();
             }
-            IlluminantRelativeWhitePoint = GetIlluminantReletiveWhitePoint();
-            ProfilePrimaries = GetPrimaries();
+            PopulatePrimaries();
         }
 
 
         private unsafe CIEXYZ GetIlluminantReletiveWhitePoint()
         {
-            var icc_wtpt = profile.ReadTag<CIEXYZ?>(TagSignature.MediaWhitePoint);
-
-            if (icc_wtpt.HasValue)
+            if (profile.TryReadTag(SafeTagSignature.MediaWhitePointTag, out var icc_wtpt))
             {
                 if (ChromaticAdaptionMatrix == null || profile.HeaderCreator == 0x6170706c /* 'aapl' */)
                 {
                     // for profiels without 'chad' tag and Apple profiles, mediaWhitepointTag is illuminant-relative
-                    return icc_wtpt.Value;
+                    return icc_wtpt;
                 }
                 else
                 {
                     // ... otherwise it is PCS-relative
-                    var pcs_wtpt = icc_wtpt.Value;
+                    var pcs_wtpt = icc_wtpt;
                     if (ChromaticAdaptionMatrix != null)
                     {
                         return ApplyInverseChad(pcs_wtpt);
@@ -126,9 +122,9 @@ namespace MHC2Gen
             if (ChromaticAdaptionMatrix != null)
             {
                 // no wtpt in icc, sum RGB and reverse chad
-                var pcs_rXYZ = profile.ReadTag<CIEXYZ>(TagSignature.RedColorant);
-                var pcs_gXYZ = profile.ReadTag<CIEXYZ>(TagSignature.GreenColorant);
-                var pcs_bXYZ = profile.ReadTag<CIEXYZ>(TagSignature.BlueColorant);
+                var pcs_rXYZ = profile.ReadTag(SafeTagSignature.RedColorantTag);
+                var pcs_gXYZ = profile.ReadTag(SafeTagSignature.GreenColorantTag);
+                var pcs_bXYZ = profile.ReadTag(SafeTagSignature.BlueColorantTag);
                 var pcs_sumrgb = pcs_rXYZ + pcs_gXYZ + pcs_bXYZ;
 
                 return ApplyInverseChad(pcs_sumrgb);
@@ -145,65 +141,18 @@ namespace MHC2Gen
             return new() { X = vec[0], Y = vec[1], Z = vec[2] };
         }
 
-        /// <summary>
-        /// get illuminant-relative primaries from profile
-        /// </summary>
-        /// <param name="profile"></param>
-        /// <returns></returns>
-        public unsafe RgbPrimaries GetPrimaries()
-        {
-            var ir_wtpt = IlluminantRelativeWhitePoint;
-
-            CIExy ir_rxy, ir_gxy, ir_bxy;
-
-            var chrm = (CIExyY*)profile.ReadTag(TagSignature.Chromaticity);
-            if (chrm != null)
-            {
-                ir_rxy = chrm[0].ToXY();
-                ir_gxy = chrm[1].ToXY();
-                ir_bxy = chrm[2].ToXY();
-            }
-            else
-            {
-                var pcs_rXYZ = profile.ReadTag<CIEXYZ>(TagSignature.RedColorant);
-                var pcs_gXYZ = profile.ReadTag<CIEXYZ>(TagSignature.GreenColorant);
-                var pcs_bXYZ = profile.ReadTag<CIEXYZ>(TagSignature.BlueColorant);
-
-
-                CIEXYZ ir_rXYZ, ir_gXYZ, ir_bXYZ;
-                if (ChromaticAdaptionMatrix != null)
-                {
-                    ir_rXYZ = ApplyInverseChad(pcs_rXYZ);
-                    ir_gXYZ = ApplyInverseChad(pcs_gXYZ);
-                    ir_bXYZ = ApplyInverseChad(pcs_bXYZ);
-                }
-                else
-                {
-                    ir_rXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, pcs_rXYZ);
-                    ir_gXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, pcs_gXYZ);
-                    ir_bXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, pcs_bXYZ);
-                }
-
-                ir_rxy = ir_rXYZ.ToXY();
-                ir_gxy = ir_gXYZ.ToXY();
-                ir_bxy = ir_bXYZ.ToXY();
-            }
-
-            return new(ir_rxy, ir_gxy, ir_bxy, ir_wtpt.ToXY());
-        }
 
         /// <summary>
-        /// use lcms transform to get primaries in D50 XYZ, then adapt to profile illuminant.
+        /// use lcms transform to get illuminant-relative primaries.
         /// </summary>
-        /// <remarks>
-        /// suffers from precision issues
-        /// </remarks>
-        public unsafe RgbPrimaries GetPrimaries2()
+        private unsafe void PopulatePrimaries()
         {
-            var ir_wtpt = IlluminantRelativeWhitePoint;
+            var ctx = new CmsContext();
 
+            ctx.SetAdaptionState(0);
+            
             var xyzprof = IccProfile.CreateXYZ();
-            var t = new CmsTransform(profile, CmsPixelFormat.RGBDouble, xyzprof, CmsPixelFormat.XYZDouble, RenderingIntent.ABSOLUTE_COLORIMETRIC, default);
+            var t = new CmsTransform(ctx, profile, CmsPixelFormat.RGBDouble, xyzprof, CmsPixelFormat.XYZDouble, RenderingIntent.ABSOLUTE_COLORIMETRIC, default);
             var pixels = new ReadOnlySpan<double>(new double[] {
                 1, 0, 0,
                 0, 1, 0,
@@ -213,18 +162,18 @@ namespace MHC2Gen
             Span<double> xyz = stackalloc double[3];
 
 
-            t.DoTransform(MemoryMarshal.Cast<double, byte>(pixels.Slice(0)), MemoryMarshal.Cast<double, byte>(xyz), 1);
-            var d50_rXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
-            t.DoTransform(MemoryMarshal.Cast<double, byte>(pixels.Slice(3)), MemoryMarshal.Cast<double, byte>(xyz), 1);
-            var d50_gXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
-            t.DoTransform(MemoryMarshal.Cast<double, byte>(pixels.Slice(6)), MemoryMarshal.Cast<double, byte>(xyz), 1);
-            var d50_bXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
-            t.DoTransform(MemoryMarshal.Cast<double, byte>(pixels.Slice(9)), MemoryMarshal.Cast<double, byte>(xyz), 1);
-            var d50_wXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
+            t.DoTransform(pixels.Slice(0), xyz, 1);
+            var rXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
+            t.DoTransform(pixels.Slice(3), xyz, 1);
+            var gXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
+            t.DoTransform(pixels.Slice(6), xyz, 1);
+            var bXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
+            t.DoTransform(pixels.Slice(9), xyz, 1);
+            var wXYZ = new CIEXYZ { X = xyz[0], Y = xyz[1], Z = xyz[2] };
 
 
-            var ir_rXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, d50_rXYZ);
-            var ir_gXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, d50_gXYZ);
+            IlluminantRelativeWhitePoint = wXYZ;
+            ProfilePrimaries = new(rXYZ.ToXY(), gXYZ.ToXY(), bXYZ.ToXY(), wXYZ.ToXY());
             var ir_bXYZ = CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, ir_wtpt, d50_bXYZ);
             return new(ir_rXYZ.ToXY(), ir_gXYZ.ToXY(), ir_bXYZ.ToXY(), ir_wtpt.ToXY());
 
@@ -238,29 +187,28 @@ namespace MHC2Gen
         public CIEXYZ GetIlluminantRelativeBlackPoint()
         {
             // NOTE: mediaBlackPointTag is no longer in ICC standard
-            var bkpt = profile.ReadTag<CIEXYZ?>(TagSignature.MediaBlackPoint);
-
-            if (bkpt.HasValue)
+            if (profile.TryReadTag(SafeTagSignature.MediaBlackPointTag, out var bkpt))
             {
                 // no chad in profile, bkpt is illuminant-relative
                 if (ChromaticAdaptionMatrix == null)
                 {
-                    return bkpt.Value;
+                    return bkpt;
                 }
                 else
                 {
-                    return ApplyInverseChad(bkpt.Value);
+                    return ApplyInverseChad(bkpt);
                 }
             }
 
             // no bkpt in tag, use lcms transform
-            var wtpt = IlluminantRelativeWhitePoint;
-            var t = new CmsTransform(profile, CmsPixelFormat.RGB8, IccProfile.CreateXYZ(), CmsPixelFormat.XYZDouble, RenderingIntent.ABSOLUTE_COLORIMETRIC, default);
+            var ctx = new CmsContext();
+            ctx.SetAdaptionState(0);
+            var t = new CmsTransform(ctx, profile, CmsPixelFormat.RGB8, IccProfile.CreateXYZ(), CmsPixelFormat.XYZDouble, RenderingIntent.ABSOLUTE_COLORIMETRIC, default);
             var input = new ReadOnlySpan<byte>(new byte[] { 0, 0, 0 });
             Span<double> outbuf = stackalloc double[3];
-            t.DoTransform(input, MemoryMarshal.Cast<double, byte>(outbuf), 1);
-            var d50_bkpt = new CIEXYZ { X = outbuf[0], Y = outbuf[1], Z = outbuf[2] };
-            return CmsGlobal.AdaptToIlluminant(CmsGlobal.D50XYZ, wtpt, d50_bkpt);
+            t.DoTransform(input, outbuf, 1);
+            bkpt = new CIEXYZ { X = outbuf[0], Y = outbuf[1], Z = outbuf[2] };
+            return bkpt;
         }
 
         public void WriteIlluminantRelativeMediaBlackPoint(in CIEXYZ value)
@@ -276,7 +224,7 @@ namespace MHC2Gen
             {
                 valueToWrite = value;
             }
-            profile.WriteTag(TagSignature.MediaBlackPoint, valueToWrite);
+            profile.WriteTag(SafeTagSignature.MediaBlackPointTag, valueToWrite);
         }
     }
 
@@ -296,9 +244,9 @@ namespace MHC2Gen
         {
             illuminantRelativeBlackPoint = GetIlluminantRelativeBlackPoint();
             (max_nits, min_nits) = GetProfileLuminance();
-            profileRedToneCurve = profile.ReadTag<ToneCurve>(TagSignature.RedTRC)!;
-            profileGreenToneCurve = profile.ReadTag<ToneCurve>(TagSignature.GreenTRC)!;
-            profileBlueToneCurve = profile.ReadTag<ToneCurve>(TagSignature.BlueTRC)!;
+            profileRedToneCurve = profile.ReadTag(SafeTagSignature.RedTRCTag);
+            profileGreenToneCurve = profile.ReadTag(SafeTagSignature.GreenTRCTag);
+            profileBlueToneCurve = profile.ReadTag(SafeTagSignature.BlueTRCTag);
             profileRedReverseToneCurve = profileRedToneCurve.Reverse();
             profileGreenReverseToneCurve = profileGreenToneCurve.Reverse();
             profileBlueReverseToneCurve = profileBlueToneCurve.Reverse();
@@ -347,10 +295,9 @@ namespace MHC2Gen
         {
             var wtpt = IlluminantRelativeWhitePoint;
             double max_nits = 80;
-            var lumi = profile.ReadTag<CIEXYZ?>(TagSignature.Luminance);
-            if (lumi.HasValue)
+            if (profile.TryReadTag(SafeTagSignature.LuminanceTag, out var lumi))
             {
-                max_nits = lumi.Value.Y;
+                max_nits = lumi.Y;
             }
             var min_nits = 0.005;
             var bkpt = illuminantRelativeBlackPoint;
@@ -365,13 +312,13 @@ namespace MHC2Gen
         public IccProfile CreateMhc2CscIcc(RgbPrimaries? sourcePrimaries = null, string sourceDescription = "sRGB")
         {
             var wtpt = IlluminantRelativeWhitePoint;
-            var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
+            var vcgt = profile.ReadTagOrDefault(SafeTagSignature.VcgtTag)?.ToArray();
 
             var devicePrimaries = ProfilePrimaries;
 
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
-            var srgbTrc = IccProfile.Create_sRGB().ReadTag<ToneCurve>(TagSignature.RedTRC)!;
+            var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
             var sourceEotf = new ToneCurve[] { srgbTrc, srgbTrc, srgbTrc };
 
             sourcePrimaries ??= RgbPrimaries.sRGB;
@@ -457,23 +404,26 @@ namespace MHC2Gen
                 Red = sourcePrimaries.Red.ToXYZ().ToCIExyY(),
                 Green = sourcePrimaries.Green.ToXYZ().ToCIExyY(),
                 Blue = sourcePrimaries.Blue.ToXYZ().ToCIExyY()
-            }, new ToneCurveTriple(srgbTrc, srgbTrc, srgbTrc));
+            }, new RgbToneCurve(srgbTrc, srgbTrc, srgbTrc));
 
-            outputProfile.WriteTag(TagSignature.Luminance, new CIEXYZ { Y = profile_max_nits });
+            outputProfile.WriteTag(SafeTagSignature.LuminanceTag, new CIEXYZ { Y = profile_max_nits });
 
             var outctx = new IccContext(outputProfile);
             outctx.WriteIlluminantRelativeMediaBlackPoint(illuminantRelativeBlackPoint);
 
             // copy device description from device profile
-            var copy_tags = new TagSignature[] { TagSignature.DeviceMfgDesc, TagSignature.DeviceModelDesc };
+            var copy_tags = new TagSignature[] { TagSignature.DeviceMfgDescTag, TagSignature.DeviceModelDescTag };
 
+            unsafe
+            {
             foreach (var tag in copy_tags)
             {
                 var tag_ptr = profile.ReadTag(tag);
-                if (tag_ptr != IntPtr.Zero)
+                    if (tag_ptr != null)
                 {
                     outputProfile.WriteTag(tag, tag_ptr);
                 }
+            }
             }
 
             // set output profile description
@@ -485,7 +435,7 @@ namespace MHC2Gen
             var new_desc = $"CSC: {sourceDescription} ({GetDeviceDescription()})";
             Console.WriteLine("Output profile description: " + new_desc);
             var new_desc_mlu = new MLU(new_desc);
-            outputProfile.WriteTag(TagSignature.ProfileDescription, new_desc_mlu);
+            outputProfile.WriteTag(SafeTagSignature.ProfileDescriptionTag, new_desc_mlu);
 
             outputProfile.WriteRawTag(MHC2Tag.Signature, mhc2);
 
@@ -510,7 +460,7 @@ namespace MHC2Gen
                { xyz_transform[2,0], xyz_transform[2,1], xyz_transform[2,2], 0 },
             };
 
-            var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
+            var vcgt = profile.ReadTagOrDefault(SafeTagSignature.VcgtTag)?.ToArray();
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
             var use_max_nits = maxBrightnessOverride ?? max_nits;
@@ -550,20 +500,23 @@ namespace MHC2Gen
                 Red = devicePrimaries.Red.ToXYZ().ToCIExyY(),
                 Green = devicePrimaries.Green.ToXYZ().ToCIExyY(),
                 Blue = devicePrimaries.Blue.ToXYZ().ToCIExyY()
-            }, new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve));
+            }, new RgbToneCurve(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve));
 
             // copy characteristics from device profile
-            var copy_tags = new TagSignature[] { TagSignature.DeviceMfgDesc, TagSignature.DeviceModelDesc };
+            var copy_tags = new TagSignature[] { TagSignature.DeviceMfgDescTag, TagSignature.DeviceModelDescTag };
+            unsafe
+            {
             foreach (var tag in copy_tags)
             {
                 var tag_ptr = profile.ReadTag(tag);
-                if (tag_ptr != IntPtr.Zero)
+                    if (tag_ptr != null)
                 {
                     outputProfile.WriteTag(tag, tag_ptr);
                 }
             }
+            }
 
-            outputProfile.WriteTag(TagSignature.Luminance, new CIEXYZ { Y = use_max_nits });
+            outputProfile.WriteTag(SafeTagSignature.LuminanceTag, new CIEXYZ { Y = use_max_nits });
 
             // the profile is not read by regular applications
             // var outctx = new IccContext(outputProfile);
@@ -578,7 +531,7 @@ namespace MHC2Gen
             var new_desc = $"CSC: HDR10 to SDR ({GetDeviceDescription()}, {use_max_nits:0} nits)";
             Console.WriteLine("Output profile description: " + new_desc);
             var new_desc_mlu = new MLU(new_desc);
-            outputProfile.WriteTag(TagSignature.ProfileDescription, new_desc_mlu);
+            outputProfile.WriteTag(SafeTagSignature.ProfileDescriptionTag, new_desc_mlu);
 
             outputProfile.WriteRawTag(MHC2Tag.Signature, mhc2);
 
@@ -597,13 +550,13 @@ namespace MHC2Gen
 
             double[,] mhc2_lut;
 
-            var outputprofileTrc = new ToneCurveTriple(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve);
-            var vcgt = profile.ReadTag<ToneCurveTriple?>(TagSignature.Vcgt)?.ToArray();
+            var outputprofileTrc = new RgbToneCurve(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve);
+            var vcgt = profile.ReadTagOrDefault(SafeTagSignature.VcgtTag)?.ToArray();
 
             if (calibrateTransfer)
             {
-                var sourceEotf = IccProfile.Create_sRGB().ReadTag<ToneCurve>(TagSignature.RedTRC)!;
-                outputprofileTrc = new ToneCurveTriple(sourceEotf, sourceEotf, sourceEotf);
+                var sourceEotf = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag);
+                outputprofileTrc = new RgbToneCurve(sourceEotf, sourceEotf, sourceEotf);
 
                 var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
                 var lut_size = 1024;
@@ -665,15 +618,18 @@ namespace MHC2Gen
 
             // copy characteristics from device profile
             var copy_tags = new TagSignature[] {
-                TagSignature.Luminance,
-                TagSignature.DeviceMfgDesc,
-                TagSignature.DeviceModelDesc,
+                TagSignature.LuminanceTag,
+                TagSignature.DeviceMfgDescTag,
+                TagSignature.DeviceModelDescTag,
             };
 
+            unsafe
+            {
             foreach (var tag in copy_tags)
             {
                 var tag_ptr = profile.ReadTag(tag);
                 outputProfile.WriteTag(tag, tag_ptr);
+            }
             }
 
             // the profile is not read by regular applications
@@ -681,12 +637,13 @@ namespace MHC2Gen
             //outctx.WriteIlluminantRelativeMediaBlackPoint(illuminantRelativeBlackPoint);
 
             // SDR ACM will not work if the profile has negative XYZ colorants (possibly due to limited precision)
-            foreach (var sig in new TagSignature[] { TagSignature.RedColorant, TagSignature.GreenColorant, TagSignature.BlueColorant })
+            foreach (var sig in new ISafeTagSignature<CIEXYZ>[] { SafeTagSignature.RedColorantTag, SafeTagSignature.GreenColorantTag, SafeTagSignature.BlueColorantTag })
             {
-                var xyz = outputProfile.ReadTag<CIEXYZ>(sig);
+                var xyz = outputProfile.ReadTag(sig);
                 if (xyz.X < 0) xyz.X = 0;
                 if (xyz.Y < 0) xyz.Y = 0;
                 if (xyz.Z < 0) xyz.Z = 0;
+                outputProfile.WriteTag(sig, xyz);
             }
 
             // set output profile description
@@ -701,7 +658,7 @@ namespace MHC2Gen
             var new_desc = $"SDR ACM: {profile.GetInfo(InfoType.Description)}";
             Console.WriteLine("Output profile description: " + new_desc);
             var new_desc_mlu = new MLU(new_desc);
-            outputProfile.WriteTag(TagSignature.ProfileDescription, new_desc_mlu);
+            outputProfile.WriteTag(SafeTagSignature.ProfileDescriptionTag, new_desc_mlu);
 
             outputProfile.WriteRawTag(MHC2Tag.Signature, mhc2);
 

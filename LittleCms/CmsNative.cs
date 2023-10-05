@@ -29,11 +29,11 @@ namespace LittleCms
         // Each context holds its owns globals and its own plug-ins. There is a global context with the id = 0 for lecacy compatibility
         // though using the global context is not recommended. Proper context handling makes lcms more thread-safe.
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
-        public static extern IntPtr cmsCreateContext(void* Plugin, IntPtr UserData);
+        public static extern IntPtr cmsCreateContext(IntPtr Plugin, IntPtr UserData);
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern void cmsDeleteContext(IntPtr ContextID);
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
-        public static extern IntPtr cmsDupContext(IntPtr ContextID, void* NewUserData);
+        public static extern IntPtr cmsDupContext(IntPtr ContextID, IntPtr NewUserData);
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern IntPtr cmsGetContextUserData(IntPtr ContextID);
 
@@ -415,9 +415,9 @@ namespace LittleCms
 
         // Read and write pre-formatted data
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
-        public static extern IntPtr cmsReadTag(IntPtr hProfile, TagSignature sig);
+        public static extern void* cmsReadTag(IntPtr hProfile, TagSignature sig);
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
-        public static extern bool cmsWriteTag(IntPtr hProfile, TagSignature sig, IntPtr data);
+        public static extern bool cmsWriteTag(IntPtr hProfile, TagSignature sig, void* data);
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern bool cmsLinkTag(IntPtr hProfile, TagSignature sig, TagSignature dest);
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]

@@ -11,7 +11,7 @@ namespace LittleCms
         public static CIExyY D50xyY { get; } =  CmsNative.cmsD50_xyY();
 
 
-        public static CIEXYZ AdaptToIlluminant(in CIEXYZ SourceWhitePt, in CIEXYZ Illuminant, in CIEXYZ Value)
+        public unsafe static CIEXYZ AdaptToIlluminant(in CIEXYZ SourceWhitePt, in CIEXYZ Illuminant, in CIEXYZ Value)
         {
             CmsNative.CheckError(CmsNative.cmsAdaptToIlluminant(out var result, SourceWhitePt, Illuminant, Value));
             return result;
