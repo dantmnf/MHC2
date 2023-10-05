@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(SolutionDir)', '$(MSBuildProjectDirectory)./').StartsWith('lcms2\'))">
+    <OutDir>$(Configuration)/$(Platform)/</OutDir>
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB8012</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+</Project>

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>x64;x86;ARM64</Platforms>
@@ -36,14 +36,14 @@
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(UseNativeAot)' != 'true'">
-        <None Include="..\lcms2\bin\lcms2.dll">
+        <None Include="$(SolutionDir)lcms2\Projects\VC2022\lcms2_DLL\$(Configuration)\$(Platform)\lcms2.dll">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
 
     <ItemGroup Condition="'$(UseNativeAot)' == 'true'">
         <DirectPInvoke Include="lcms2" />
-        <NativeLibrary Include="..\lcms2\Lib\MS\lcms2_static.lib" Condition="$(RuntimeIdentifier.StartsWith('win'))" />
+        <NativeLibrary Include="$(SolutionDir)lcms2\Projects\VC2022\lcms2_static\$(Configuration)\$(Platform)\lcms2_static.lib" Condition="$(RuntimeIdentifier.StartsWith('win'))" />
     </ItemGroup>
 
     <ItemGroup>
