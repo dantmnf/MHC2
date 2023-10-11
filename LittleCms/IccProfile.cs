@@ -123,7 +123,11 @@ namespace LittleCms
 
         public unsafe void WriteTag(TagSignature sig, void* handle)
         {
-            CheckError(cmsWriteTag(Handle, sig, handle));
+            var result = cmsWriteTag(Handle, sig, handle);
+            if (handle != null)
+            {
+                CheckError(result);
+            }
         }
 
         public void WriteTag<T>(ISafeTagSignature<T> sig, T value)
