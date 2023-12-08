@@ -67,6 +67,9 @@ namespace MHC2Gen
             {
                 var srcgamut = RgbPrimaries.sRGB;
                 var srcdesc = "sRGB";
+                var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
+                var sourceEotf = new ToneCurve[] { srgbTrc, srgbTrc, srgbTrc };
+
                 if (namedgamut.HasValue)
                 {
                     (srcgamut, srcdesc) = namedgamut.Value switch
@@ -83,12 +86,13 @@ namespace MHC2Gen
                     var srcctx = new IccContext(IccProfile.Open(File.ReadAllBytes(iccfile)));
                     srcgamut = srcctx.ProfilePrimaries;
                     srcdesc = srcctx.GetDescription();
+                    sourceEotf = new ToneCurve[] { srcctx.profileRedToneCurve, srcctx.profileGreenToneCurve, srcctx.profileBlueToneCurve };
                 }
 
                 var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
                 var ctx = new DeviceIccContext(devicc);
                 ctx.UseChromaticAdaptation = useChromaticAdaptation;
-                var mhc2icc = ctx.CreateMhc2CscIcc(srcgamut, srcdesc);
+                var mhc2icc = ctx.CreateMhc2CscIcc(srcgamut, sourceEotf, srcdesc);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
                 Console.WriteLine("Written profile {0}", outputProfile);

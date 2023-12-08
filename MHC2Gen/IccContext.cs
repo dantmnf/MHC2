@@ -84,6 +84,12 @@ namespace MHC2Gen
         public Matrix<double>? ChromaticAdaptionMatrix { get; }
         public Matrix<double>? InverseChromaticAdaptionMatrix { get; }
         public RgbPrimaries ProfilePrimaries { get; }
+        public ToneCurve profileRedToneCurve;
+        public ToneCurve profileGreenToneCurve;
+        public ToneCurve profileBlueToneCurve;
+        public ToneCurve profileRedReverseToneCurve;
+        public ToneCurve profileGreenReverseToneCurve;
+        public ToneCurve profileBlueReverseToneCurve;
 
         public IccContext(IccProfile profile)
         {
@@ -98,6 +104,12 @@ namespace MHC2Gen
                 InverseChromaticAdaptionMatrix = ChromaticAdaptionMatrix.Inverse();
             }
             (IlluminantRelativeWhitePoint, ProfilePrimaries) = PopulatePrimaries();
+            profileRedToneCurve = profile.ReadTag(SafeTagSignature.RedTRCTag);
+            profileGreenToneCurve = profile.ReadTag(SafeTagSignature.GreenTRCTag);
+            profileBlueToneCurve = profile.ReadTag(SafeTagSignature.BlueTRCTag);
+            profileRedReverseToneCurve = profileRedToneCurve.Reverse();
+            profileGreenReverseToneCurve = profileGreenToneCurve.Reverse();
+            profileBlueReverseToneCurve = profileBlueToneCurve.Reverse();
         }
 
 
@@ -251,12 +263,6 @@ namespace MHC2Gen
         CIEXYZ illuminantRelativeBlackPoint;
         double min_nits;
         double max_nits;
-        ToneCurve profileRedToneCurve;
-        ToneCurve profileGreenToneCurve;
-        ToneCurve profileBlueToneCurve;
-        ToneCurve profileRedReverseToneCurve;
-        ToneCurve profileGreenReverseToneCurve;
-        ToneCurve profileBlueReverseToneCurve;
 
         public bool UseChromaticAdaptation { get; set; }
 
@@ -264,12 +270,6 @@ namespace MHC2Gen
         {
             illuminantRelativeBlackPoint = GetIlluminantRelativeBlackPoint();
             (max_nits, min_nits) = GetProfileLuminance();
-            profileRedToneCurve = profile.ReadTag(SafeTagSignature.RedTRCTag);
-            profileGreenToneCurve = profile.ReadTag(SafeTagSignature.GreenTRCTag);
-            profileBlueToneCurve = profile.ReadTag(SafeTagSignature.BlueTRCTag);
-            profileRedReverseToneCurve = profileRedToneCurve.Reverse();
-            profileGreenReverseToneCurve = profileGreenToneCurve.Reverse();
-            profileBlueReverseToneCurve = profileBlueToneCurve.Reverse();
         }
 
         public static Matrix<double> RgbToXYZ(RgbPrimaries primaries)
@@ -329,7 +329,7 @@ namespace MHC2Gen
             return (max_nits, min_nits);
         }
 
-        public IccProfile CreateMhc2CscIcc(RgbPrimaries? sourcePrimaries = null, string sourceDescription = "sRGB")
+        public IccProfile CreateMhc2CscIcc(RgbPrimaries? sourcePrimaries = null, ToneCurve[]? sourceEotf = null, string sourceDescription = "sRGB")
         {
             var wtpt = IlluminantRelativeWhitePoint;
             var vcgt = profile.ReadTagOrDefault(SafeTagSignature.VcgtTag)?.ToArray();
@@ -338,8 +338,11 @@ namespace MHC2Gen
 
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
-            var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
-            var sourceEotf = new ToneCurve[] { srgbTrc, srgbTrc, srgbTrc };
+            if (sourceEotf == null)
+            {
+                var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
+                sourceEotf = new ToneCurve[] { srgbTrc, srgbTrc, srgbTrc };
+            }
 
             sourcePrimaries ??= RgbPrimaries.sRGB;
 
@@ -433,7 +436,7 @@ namespace MHC2Gen
                 Red = sourcePrimaries.Red.ToXYZ().ToCIExyY(),
                 Green = sourcePrimaries.Green.ToXYZ().ToCIExyY(),
                 Blue = sourcePrimaries.Blue.ToXYZ().ToCIExyY()
-            }, new RgbToneCurve(srgbTrc, srgbTrc, srgbTrc));
+            }, new RgbToneCurve(sourceEotf[0], sourceEotf[1], sourceEotf[2]));
 
             outputProfile.WriteTag(SafeTagSignature.LuminanceTag, new CIEXYZ { Y = profile_max_nits });
 
