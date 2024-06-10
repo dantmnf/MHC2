@@ -10,6 +10,15 @@ Read official announcement and documentation from Microsoft:
 
 or the original reverse-engineered pipeline [here](pipeline.md).
 
+# Known Issues
+
+As of Windows 11 23H2, when an MHC calibration is in effect:
+
+* Buggy mouse cursor and MPO composition observed on NVIDIA and AMD GPU
+  * They did get some sort of color transform, but not the desired one
+* Poor LUT quality observed on Intel GPU
+* Conflicts with novideo_srgb
+
 # MHC2Gen Tool
 
 As per documentation, an ICC profile with private extension (MHC ICC profile) is required to use modern capabilities documented above.
