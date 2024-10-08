@@ -12,11 +12,11 @@ or the original reverse-engineered pipeline [here](pipeline.md).
 
 # Known Issues
 
-As of Windows 11 23H2, when an MHC calibration is in effect:
+As of Windows 11 24H2, when an MHC calibration is in effect:
 
 * Buggy mouse cursor and MPO composition observed on NVIDIA and AMD GPU
   * They did get some sort of color transform, but not the desired one
-* Poor LUT quality observed on Intel GPU
+* Poor LUT quality on 8-bit output observed on Intel GPU
 * Conflicts with novideo_srgb
 
 # MHC2Gen Tool
@@ -75,20 +75,26 @@ From [ledoge/novideo_srgb](https://github.com/ledoge/novideo_srgb), another LUT-
 
 # Notes for SDR Auto Color Management
 
-As of version 22622.598, only `lumi`, `MHC2` and primaries values in a “valid” MHC ICC profile are used (tone curves and `vcgt` are ignored). Extra calibration to sRGB (or gamma 2.2[^1]) tone response via `MHC2` regamma LUT is needed for optimal results. However, with an “invalid” profile, `vcgt` will be applied.
+As of Windows 11 24H2 (26100.1882), only `lumi`, `MHC2` and primaries values in a “valid” MHC ICC profile are used (tone curves and `vcgt` are ignored). Extra calibration to sRGB (or gamma 2.2[^1]) tone response via `MHC2` regamma LUT is needed for optimal results. However, with an “invalid” profile, `vcgt` will be applied.
+
+Given tone curves in ICC ignored, SDR ACM assumes the display is calibrated to sRGB tone curve, which can be achieved with MHC2 LUT.
+
+
 
 It is expected future releases will use more characteristics like tone curves and probably PCS LUT in ICC profile, and preferably without the requirement of `MHC2` tag.
 
-SDR Auto Color Management requires a non-HDR-capable display at the moment. You are out of luck of using color managed desktop if your display claims a <b>r<i>a</i></b><i>n<u>d</i>om</u> HDR mapping (HDRn’t) support.
+Before Windows 11 24H2, SDR Auto Color Management requires a non-HDR-capable display at the moment. You are out of luck of using color managed desktop if your display claims a <b>r<i>a</i></b><i>n<u>d</i>om</u> HDR mapping (HDRn’t) support.
 
-## How to unfuck your [ScamHDR 400] or other HDRn’t displays
-### i.e. How to force disable fake HDR 
+<details>
+<summary><b>How to unfuck your ScamHDR 400 or other HDRn’t displays</b></summary>
+ 
+i.e. How to force disable fake HDR 
 
 Microsoft has a good tradition that trusting hardware vendors’ marketing scam over professional users. [This also applies to HDR displays.](https://support.microsoft.com/en-us/windows/hdr-settings-in-windows-2d767185-38ec-7fdc-6f97-bbc6c5ef24e6#:~:text=Colors%20do%20not%20display%20correctly%20on%20an%20external%20HDR%2Dcapable%20display.)
 
 If your display claims to be HDR-capable, you can disable it in one of the following ways:
 
-### Hiding HDR support
+#### Hiding HDR support
   * OSD setting
     * Some display only turns off HDR10 wire signal decoding without hiding HDR capability, i.e. assuming HDR10 wire signal is SDR signal. In this case, [emulating HDR10 on SDR](#example-3-emulate-hdr10-on-sdr-display) can be used to calibrate HDR output.
   * Override EDID
@@ -97,7 +103,7 @@ If your display claims to be HDR-capable, you can disable it in one of the follo
     * by intercepting EDID in physical link (cost: unlimited)
     * Use an external box that can override EDID (e.g. a ~$200 3DLUT loader, maybe not HDCP-capable)
 
-### Replacing
+#### Replacing
 Replace it with [some][XDR] [professional][Creator Extreme] [display][HX310] (cost: $3.5k+)
 
 [ScamHDR 400]: https://displayhdr.org/performance-criteria-cts1-1/
@@ -105,5 +111,13 @@ Replace it with [some][XDR] [professional][Creator Extreme] [display][HX310] (co
 [Creator Extreme]: https://www.lenovo.com/us/en/p/accessories-and-software/monitors/office/62a6rar3us
 [HX310]: https://pro.sony/ue_US/products/broadcastpromonitors/bvm-hx310
 [auto color management]: https://user-images.githubusercontent.com/2252500/194107647-788c3cab-6730-4728-b337-266ab9867481.png
+
+</details>
+
+## Notes for ICC shim (Use legacy display ICC color management)
+
+As of Windows 11 24H2 (26100.1882), the synthetic ICC profile uses gamma 2.2 TRC while actual processing uses sRGB TRC.
+
+Applications with ICC shim will still have MHC2 transform applied.
 
 [^1]: Windows SDK headers suppose a gamma 2.2 transfer (`OUTPUT_WIRE_COLOR_SPACE_G22_P709`) but experiments show that assuming an sRGB transfer function gives better average delta-E on verification (this may vary on GPU vendor).
