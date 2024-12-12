@@ -356,8 +356,8 @@ namespace MHC2Gen
 
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
-            var srgbTrc = ReallyWantGamma22 ? new ToneCurve(2.2) : IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
-            var sourceEotf = new ToneCurve[] { srgbTrc, srgbTrc, srgbTrc };
+            var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
+            var outputTrc = ReallyWantGamma22 ? new ToneCurve(2.2) : srgbTrc;
 
             sourcePrimaries ??= RgbPrimaries.sRGB;
 
@@ -421,7 +421,7 @@ namespace MHC2Gen
                     for (int iinput = 0; iinput < lut_size; iinput++)
                     {
                         var input = (float)iinput / (lut_size - 1);
-                        var linear = sourceEotf[ch].EvalF32(input);
+                        var linear = outputTrc.EvalF32(input);
                         var dev_output = deviceOetf[ch].EvalF32(linear);
                         if (vcgt != null)
                         {
