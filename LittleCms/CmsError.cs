@@ -21,7 +21,7 @@ namespace LittleCms
             var libver = cmsGetEncodedCMMversion();
             if (libver != LCMS_VERSION)
             {
-                throw new TypeLoadException("lcms2 version mismatch");
+                throw new TypeLoadException($"lcms2 version mismatch, expect {LCMS_VERSION}, got {libver}");
             }
             LastError = new();
             cmsSetLogErrorHandler(ErrorCallback);

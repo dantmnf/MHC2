@@ -179,7 +179,7 @@ namespace LittleCms
             var buf = new byte[len];
             fixed (byte* ptr = buf)
                 len = cmsGetProfileInfo(Handle, info, in lang, in cont, ptr, len);
-            var s = WcharEncoding.GetString(buf)[..^1];
+            var s = Encoding.UTF8.GetString(buf)[..^1];
             return s;
         }
 

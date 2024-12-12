@@ -13,10 +13,8 @@ namespace LittleCms
 {
     internal unsafe partial class CmsNative
     {
-        private const int LCMS_VERSION = 2131;
+        private const int LCMS_VERSION = 2160;
         private const string LIB = "lcms2";
-
-        public static readonly Encoding WcharEncoding = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? Encoding.Unicode : Encoding.UTF32;
 
         // Get LittleCMS version (for shared objects) -----------------------------------------------------------------------------
 
@@ -339,6 +337,10 @@ namespace LittleCms
         public static extern bool cmsMLUsetWide(IntPtr mlu,
                                                   in uint LanguageCode, in uint CountryCode,
                                                   in byte WideString);
+        [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
+        public static extern bool cmsMLUsetUTF8(IntPtr mlu,
+                                          in uint LanguageCode, in uint CountryCode,
+                                          in byte UTF8String);
 
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern uint cmsMLUgetASCII(IntPtr mlu,
@@ -349,6 +351,10 @@ namespace LittleCms
         public static extern uint cmsMLUgetWide(IntPtr mlu,
                                                  in uint LanguageCode, in uint CountryCode,
                                                  byte* Buffer, uint BufferSize);
+        [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
+        public static extern uint cmsMLUgetUTF8(IntPtr mlu,
+                                         in uint LanguageCode, in uint CountryCode,
+                                         byte* Buffer, uint BufferSize);
 
         [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
         public static extern bool cmsMLUgetTranslation(IntPtr mlu,
@@ -518,6 +524,10 @@ namespace LittleCms
         public static extern uint cmsGetProfileInfoASCII(IntPtr hProfile, InfoType Info,
                                                                     in uint LanguageCode, in uint CountryCode,
                                                                     byte* Buffer, uint BufferSize);
+        [DllImport(LIB, CallingConvention = CallingConvention.Winapi, ExactSpelling = true)]
+        public static extern uint cmsGetProfileInfoUTF8(IntPtr hProfile, InfoType Info,
+                                                        in uint LanguageCode, in uint CountryCode,
+                                                        void* Buffer, uint BufferSize);
 
         // MD5 message digest --------------------------------------------------------------------------------------------------
 

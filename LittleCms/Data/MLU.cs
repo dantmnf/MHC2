@@ -82,23 +82,23 @@ namespace LittleCms.Data
         public unsafe void Set(string language, string country, string s)
         {
             var (lang, cont) = EncodeLanguageCountryCode(language, country);
-            var wchbuf = WcharEncoding.GetBytes(s + "\0");
-            CheckError(cmsMLUsetWide(Handle, in lang, in cont, in wchbuf[0]));
+            var buf = Encoding.UTF8.GetBytes(s + "\0");
+            CheckError(cmsMLUsetUTF8(Handle, in lang, in cont, in buf[0]));
 
         }
 
         public unsafe string? Get(string languageCode, string countryCode)
         {
             var (lang, cont) = EncodeLanguageCountryCode(languageCode, countryCode);
-            var len = cmsMLUgetWide(Handle, in lang, in cont, null, 0);
+            var len = cmsMLUgetUTF8(Handle, in lang, in cont, null, 0);
             if (len == 0)
             {
                 return null;
             }
             var buf = new byte[(int)len];
             fixed (byte* ptr = buf)
-                len = CheckError(cmsMLUgetWide(Handle, in lang, in cont, ptr, len));
-            var s = WcharEncoding.GetString(buf);
+                len = CheckError(cmsMLUgetUTF8(Handle, in lang, in cont, ptr, len));
+            var s = Encoding.UTF8.GetString(buf);
             return s[..^1];
         }
 
