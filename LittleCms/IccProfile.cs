@@ -174,11 +174,11 @@ namespace LittleCms
         public unsafe string GetInfo(InfoType info, string languageCode = MLU.NoLanguage, string countryCode = MLU.NoCountry)
         {
             var (lang, cont) = MLU.EncodeLanguageCountryCode(languageCode, countryCode);
-            var len = cmsGetProfileInfo(Handle, info, in lang, in cont, null, 0);
+            var len = cmsGetProfileInfoUTF8(Handle, info, in lang, in cont, null, 0);
             if (len == 0) return "";
             var buf = new byte[len];
             fixed (byte* ptr = buf)
-                len = cmsGetProfileInfo(Handle, info, in lang, in cont, ptr, len);
+                len = cmsGetProfileInfoUTF8(Handle, info, in lang, in cont, ptr, len);
             var s = Encoding.UTF8.GetString(buf)[..^1];
             return s;
         }
