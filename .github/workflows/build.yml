@@ -9,11 +9,11 @@ jobs:
   build-amd64:
     runs-on: windows-2022
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: true
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 7.x
         include-prerelease: true
@@ -24,7 +24,7 @@ jobs:
         msbuild /p:Configuration=Release;Platform=x64 lcms2\Projects\VC2022\lcms2_static\lcms2_static.vcxproj
     - name: fetch nuget cache
       id: cache-nuget
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       with:
         path: ~/.nuget/packages
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }} #hash of project files
@@ -37,14 +37,14 @@ jobs:
         dotnet publish -c Release -r win-x64 -p:UseNativeAot=true -o bin\aot
         tar caf ..\MHC2Gen.zip -C bin\aot MHC2Gen.exe
     - name: artifact bin
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v4
       with:
         # Artifact name
         name: bin
         # Directory containing files to upload
         path: MHC2Gen/bin
     - name: artifact obj
-      uses: actions/upload-artifact@v1.0.0
+      uses: actions/upload-artifact@v4
       with:
         # Artifact name
         name: obj
