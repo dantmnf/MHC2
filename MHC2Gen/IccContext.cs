@@ -276,6 +276,8 @@ namespace MHC2Gen
 
         public KeepWhitePoint KeepProfileWhitePoint { get; set; } = KeepWhitePoint.None;
 
+        public bool ReallyWantGamma22 { get; set; } = false;
+
         public DeviceIccContext(IccProfile profile) : base(profile)
         {
             illuminantRelativeBlackPoint = GetIlluminantRelativeBlackPoint();
@@ -354,7 +356,7 @@ namespace MHC2Gen
 
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
-            var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
+            var srgbTrc = ReallyWantGamma22 ? new ToneCurve(2.2) : IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
             var sourceEotf = new ToneCurve[] { srgbTrc, srgbTrc, srgbTrc };
 
             sourcePrimaries ??= RgbPrimaries.sRGB;
@@ -615,7 +617,7 @@ namespace MHC2Gen
 
             if (calibrateTransfer)
             {
-                var sourceEotf = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag);
+                var sourceEotf = ReallyWantGamma22 ? new ToneCurve(2.2) : IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag);
                 outputprofileTrc = new RgbToneCurve(sourceEotf, sourceEotf, sourceEotf);
 
                 var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
