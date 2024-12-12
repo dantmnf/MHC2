@@ -3,6 +3,7 @@ using System.IO;
 using LittleCms;
 using System.CommandLine;
 using LittleCms.Data;
+using System.CommandLine.Parsing;
 
 namespace MHC2Gen
 {
@@ -17,56 +18,127 @@ namespace MHC2Gen
             P3D65,
             BT2020
         }
+
+        public enum KeepWhitePointArg
+        {
+            Simple,
+            Bradford
+        }
+
         static int Main(string[] args)
         {
+            var outProfDescOpt = new Option<string?>("--profile-desc", "description of output profile");
+            var outProfVerOpt = new Option<double?>("--profile-version", "ICC version of output profile");
 
-            var outprofdescopt = new Option<string?>("--profile-desc", "description of output profile");
-            var outprofveropt = new Option<double?>("--profile-version", "ICC version of output profile");
+            var srcGamutOpt = new Option<NamedGamut?>("--source-gamut", "specify source gamut for transform");
+            var srcGamutIccOpt = new Option<string?>("--source-gamut-icc", "specify source gamut for transform with ICC profile, only primaries and white point are used");
 
-            var srcgamutoption = new Option<NamedGamut?>("--source-gamut", "specify source gamut for transform");
-            var srcgamuticcoption = new Option<string?>("--source-gamut-icc", "specify source gamut for transform with ICC profile, only primaries and white point are used");
+            var keepWhitePointOpt = new Option<KeepWhitePointArg?>("--keep-whitepoint", "keep profile white point");
+            var chromAdaptOpt = new Option<bool>("--chromatic-adaptation", "equivalent to --keep-whitepoint=Bradford");
 
-            var chromadaptopt = new Option<bool>("--chromatic-adaptation", "use Bradford chromatic adaptation to device white point");
-            var calibtransopt = new Option<bool>("--calibrate-transfer", "calibrate output transfer to sRGB");
+            var calibTransOpt = new Option<bool>("--calibrate-transfer", "calibrate output transfer to sRGB");
 
-            var minnitsopt = new Option<double?>("--min-nits", "override minimum brightness nits");
-            var maxnitsopt = new Option<double?>("--max-nits", "override maximum brightness nits");
+            var minNitsOpt = new Option<double?>("--min-nits", "override minimum brightness nits");
+            var maxNitsOpt = new Option<double?>("--max-nits", "override maximum brightness nits");
 
-            var devprofarg = new Argument<string>("device profile");
-            var outprofarg = new Argument<string>("output profile");
+            var devProfArg = new Argument<string>("device profile");
+            var outProfArg = new Argument<string>("output profile");
 
-            var sdrcsccmd = new Command("sdr-csc", "create a matrix-LUT proofing profile for a given device profile")
+            var sdrCscCmd = new Command("sdr-csc", "create a matrix-LUT proofing profile for a given device profile")
             {
-               outprofdescopt, outprofveropt, srcgamutoption, srcgamuticcoption, chromadaptopt, devprofarg, outprofarg
+                outProfDescOpt,
+                outProfVerOpt,
+                srcGamutOpt,
+                srcGamutIccOpt,
+                keepWhitePointOpt,
+                chromAdaptOpt,
+                devProfArg,
+                outProfArg,
             };
 
-            var sdracmcmd = new Command("sdr-acm", "create profile for SDR advanced color")
+            var sdrAcmCmd = new Command("sdr-acm", "create profile for SDR advanced color")
             {
-                outprofdescopt, outprofveropt, calibtransopt, chromadaptopt, devprofarg, outprofarg
+                outProfDescOpt,
+                outProfVerOpt,
+                calibTransOpt,
+                keepWhitePointOpt,
+                chromAdaptOpt,
+                devProfArg,
+                outProfArg
             };
 
-            var hdrdecodecmd = new Command("hdr-decode", "create a matrix-LUT profile to convert Windows HDR10 output to SDR (hard clip, no tone mapping)")
+            var hdrDecodeCmd = new Command("hdr-decode", "create a matrix-LUT profile to convert Windows HDR10 output to SDR (hard clip, no tone mapping)")
             {
-                outprofdescopt, outprofveropt, minnitsopt, maxnitsopt, chromadaptopt, devprofarg, outprofarg
+                outProfDescOpt,
+                outProfVerOpt,
+                minNitsOpt,
+                maxNitsOpt,
+                chromAdaptOpt,
+                devProfArg,
+                outProfArg
             };
 
             var rootcmd = new RootCommand()
             {
-                sdrcsccmd, sdracmcmd, hdrdecodecmd
+                sdrCscCmd, sdrAcmCmd, hdrDecodeCmd
             };
 
-            sdrcsccmd.AddValidator((result) =>
+            
+
+            sdrCscCmd.AddValidator((result) =>
             {
-                if (result.GetValueForOption(srcgamutoption) != null && result.GetValueForOption(srcgamuticcoption) != null)
+                if (result.GetValueForOption(srcGamutOpt) != null && result.GetValueForOption(srcGamutIccOpt) != null)
                 {
                     result.ErrorMessage = "source-gamut and source-gamut-icc cannot be used together.";
                 }
             });
 
-            sdrcsccmd.SetHandler((namedgamut, iccfile, deviceProfile, outputProfile, profdesc, profver, useChromaticAdaptation) =>
+            var keepWhitePointValidator = new ValidateSymbolResult<CommandResult>((result) =>
+            {
+                if (result.GetValueForOption(chromAdaptOpt))
+                {
+                    var keepwp = result.GetValueForOption(keepWhitePointOpt);
+                    if (keepwp.HasValue && keepwp.Value != KeepWhitePointArg.Bradford)
+                    {
+                        result.ErrorMessage = "keep-whitepoint and chromatic-adaptation specified different method.";
+                    }
+                }
+            });
+
+            KeepWhitePoint GetKeepWhitePointType(ParseResult result)
+            {
+                var keepwp = result.GetValueForOption(keepWhitePointOpt);
+                if (keepwp.HasValue)
+                {
+                    return keepwp switch
+                    {
+                        KeepWhitePointArg.Simple => KeepWhitePoint.Simple,
+                        KeepWhitePointArg.Bradford => KeepWhitePoint.Bradford,
+                        _ => KeepWhitePoint.None
+                    };
+                }
+
+                if (result.GetValueForOption(chromAdaptOpt))
+                {
+                    return KeepWhitePoint.Bradford;
+                }
+
+                return KeepWhitePoint.None;
+            }
+
+            sdrCscCmd.SetHandler((invocation) =>
             {
                 var srcgamut = RgbPrimaries.sRGB;
                 var srcdesc = "sRGB";
+                var parse = invocation.ParseResult;
+                var namedgamut = parse.GetValueForOption(srcGamutOpt);
+                var iccfile = parse.GetValueForOption(srcGamutIccOpt);
+                var deviceProfile = parse.GetValueForArgument(devProfArg);
+                var profdesc = parse.GetValueForOption(outProfDescOpt);
+                var profver = parse.GetValueForOption(outProfVerOpt);
+                var outputProfile = parse.GetValueForArgument(outProfArg);
+                var keepwp = GetKeepWhitePointType(parse);
+
                 if (namedgamut.HasValue)
                 {
                     (srcgamut, srcdesc) = namedgamut.Value switch
@@ -87,34 +159,56 @@ namespace MHC2Gen
 
                 var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
                 var ctx = new DeviceIccContext(devicc);
-                ctx.UseChromaticAdaptation = useChromaticAdaptation;
+                ctx.KeepProfileWhitePoint = keepwp;
                 var mhc2icc = ctx.CreateMhc2CscIcc(srcgamut, srcdesc);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
                 Console.WriteLine("Written profile {0}", outputProfile);
-            }, srcgamutoption, srcgamuticcoption, devprofarg, outprofarg, outprofdescopt, outprofveropt, chromadaptopt);
+            });
 
-            sdracmcmd.SetHandler((calibrate, deviceProfile, outputProfile, profdesc, profver, useChromaticAdaptation) =>
+            sdrAcmCmd.SetHandler((invocation) =>
             {
+                var parse = invocation.ParseResult;
+                var deviceProfile = parse.GetValueForArgument(devProfArg);
+                var profdesc = parse.GetValueForOption(outProfDescOpt);
+                var profver = parse.GetValueForOption(outProfVerOpt);
+                var outputProfile = parse.GetValueForArgument(outProfArg);
+                var keepwp = GetKeepWhitePointType(parse);
+                var calibrate = parse.GetValueForOption(calibTransOpt);
+
+                if (keepwp == KeepWhitePoint.Bradford)
+                {
+                    invocation.Console.WriteLine("Warning: using Bradford chromatic adaptation with ACM is not supported and will produce strange colors with ICC shim apps");
+                }
+
                 var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
                 var ctx = new DeviceIccContext(devicc);
-                ctx.UseChromaticAdaptation = useChromaticAdaptation;
+                ctx.KeepProfileWhitePoint = keepwp;
                 var mhc2icc = ctx.CreateSdrAcmIcc(calibrate);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
                 Console.WriteLine("Written profile {0}", outputProfile);
-            }, calibtransopt, devprofarg, outprofarg, outprofdescopt, outprofveropt, chromadaptopt);
+            });
 
-            hdrdecodecmd.SetHandler((deviceProfile, outputProfile, profdesc, profver, minnits, maxnits, useChromaticAdaptation) =>
+            hdrDecodeCmd.SetHandler((invocation) =>
             {
+                var parse = invocation.ParseResult;
+                var deviceProfile = parse.GetValueForArgument(devProfArg);
+                var profdesc = parse.GetValueForOption(outProfDescOpt);
+                var profver = parse.GetValueForOption(outProfVerOpt);
+                var outputProfile = parse.GetValueForArgument(outProfArg);
+                var minnits = parse.GetValueForOption(minNitsOpt);
+                var maxnits = parse.GetValueForOption(maxNitsOpt);
+                var keepwp = GetKeepWhitePointType(parse);
+
                 var devicc = IccProfile.Open(File.ReadAllBytes(deviceProfile));
                 var ctx = new DeviceIccContext(devicc);
-                ctx.UseChromaticAdaptation = useChromaticAdaptation;
+                ctx.KeepProfileWhitePoint = keepwp;
                 var mhc2icc = ctx.CreatePQ10DecodeIcc(maxnits, minnits);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
                 Console.WriteLine("Written profile {0}", outputProfile);
-            }, devprofarg, outprofarg, outprofdescopt, outprofveropt, minnitsopt, maxnitsopt, chromadaptopt);
+            });
 
             try
             {

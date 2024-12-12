@@ -16,12 +16,12 @@ namespace MHC2Gen
             return new() { X = x * Y / y, Y = Y, Z = (1 - x - y) * Y / y };
         }
     }
-    internal class RgbPrimaries
+    internal record class RgbPrimaries
     {
-        public CIExy Red { get; set; }
-        public CIExy Green { get; set; }
-        public CIExy Blue { get; set; }
-        public CIExy White { get; set; }
+        public CIExy Red { get; init; }
+        public CIExy Green { get; init; }
+        public CIExy Blue { get; init; }
+        public CIExy White { get; init; }
 
         private RgbPrimaries() { }
         public RgbPrimaries(CIExy red, CIExy green, CIExy blue, CIExy white)

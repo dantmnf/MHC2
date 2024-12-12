@@ -77,6 +77,22 @@ namespace MHC2Gen
 
     }
 
+    public enum KeepWhitePoint
+    {
+        /// <summary>
+        /// don't keep profile white point (absolute colorimetric)
+        /// </summary>
+        None,
+        /// <summary>
+        /// omit white point transform
+        /// </summary>
+        Simple,
+        /// <summary>
+        /// use Bradford chromatic adaptation to device white point
+        /// </summary>
+        Bradford
+    }
+
     internal class IccContext
     {
         protected IccProfile profile;
@@ -258,7 +274,7 @@ namespace MHC2Gen
         ToneCurve profileGreenReverseToneCurve;
         ToneCurve profileBlueReverseToneCurve;
 
-        public bool UseChromaticAdaptation { get; set; }
+        public KeepWhitePoint KeepProfileWhitePoint { get; set; } = KeepWhitePoint.None;
 
         public DeviceIccContext(IccProfile profile) : base(profile)
         {
@@ -358,9 +374,14 @@ namespace MHC2Gen
 
             // pipeline here: input signal converted to XYZ (interpreted as custom RGB)
 
-            if (UseChromaticAdaptation)
+            switch (KeepProfileWhitePoint)
             {
-                user_matrix = GetChromaticAdaptationMatrix(sourcePrimaries.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+                case KeepWhitePoint.Bradford:
+                    user_matrix = GetChromaticAdaptationMatrix(sourcePrimaries.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+                    break;
+                case KeepWhitePoint.Simple:
+                    devicePrimaries = devicePrimaries with { White = RgbPrimaries.sRGB.White };
+                    break;
             }
 
             // pipeline here: input signal XYZ adapted to device white point
@@ -481,9 +502,14 @@ namespace MHC2Gen
             Matrix<double> user_matrix = DenseMatrix.CreateIdentity(3);
 
 
-            if (UseChromaticAdaptation)
+            switch (KeepProfileWhitePoint)
             {
-                user_matrix = GetChromaticAdaptationMatrix(sourcePrimaries.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+                case KeepWhitePoint.Bradford:
+                    user_matrix = GetChromaticAdaptationMatrix(sourcePrimaries.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+                    break;
+                case KeepWhitePoint.Simple:
+                    devicePrimaries = devicePrimaries with { White = RgbPrimaries.sRGB.White };
+                    break;
             }
 
 
@@ -582,17 +608,6 @@ namespace MHC2Gen
         {
             Matrix<double> user_matrix = DenseMatrix.CreateIdentity(3);
 
-            if (UseChromaticAdaptation)
-            {
-                user_matrix = GetChromaticAdaptationMatrix(new CIExy { x = 0.3127, y = 0.3290 }.ToXYZ(), ProfilePrimaries.White.ToXYZ()) * user_matrix;
-            }
-
-            var mhc2_matrix = new double[,] {
-               { user_matrix[0,0], user_matrix[0,1], user_matrix[0,2], 0 },
-               { user_matrix[1,0], user_matrix[1,1], user_matrix[1,2], 0 },
-               { user_matrix[2,0], user_matrix[2,1], user_matrix[2,2], 0 },
-            };
-
             double[,] mhc2_lut;
 
             var outputprofileTrc = new RgbToneCurve(profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve);
@@ -642,6 +657,24 @@ namespace MHC2Gen
                 mhc2_lut = new double[,] { { 0, 1 }, { 0, 1 }, { 0, 1 } };
             }
 
+            var devicePrimaries = ProfilePrimaries;
+
+            switch (KeepProfileWhitePoint)
+            {
+                case KeepWhitePoint.Bradford:
+                    user_matrix = GetChromaticAdaptationMatrix(RgbPrimaries.sRGB.White.ToXYZ(), devicePrimaries.White.ToXYZ()) * user_matrix;
+                    break;
+                case KeepWhitePoint.Simple:
+                    devicePrimaries = devicePrimaries with { White = RgbPrimaries.sRGB.White };
+                    break;
+            }
+
+            var mhc2_matrix = new double[,] {
+               { user_matrix[0,0], user_matrix[0,1], user_matrix[0,2], 0 },
+               { user_matrix[1,0], user_matrix[1,1], user_matrix[1,2], 0 },
+               { user_matrix[2,0], user_matrix[2,1], user_matrix[2,2], 0 },
+            };
+
 
             var mhc2d = new MHC2Tag
             {
@@ -653,7 +686,6 @@ namespace MHC2Gen
 
             var mhc2 = mhc2d.ToBytes();
 
-            var devicePrimaries = ProfilePrimaries;
             var outputProfile = IccProfile.CreateRGB(devicePrimaries.White.ToXYZ().ToCIExyY(), new CIExyYTRIPLE
             {
                 Red = devicePrimaries.Red.ToXYZ().ToCIExyY(),
