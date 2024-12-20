@@ -354,6 +354,7 @@ namespace MHC2Gen
 
             var devicePrimaries = ProfilePrimaries;
 
+            var deviceEotf = new ToneCurve[] { profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve };
             var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
             var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
@@ -418,11 +419,13 @@ namespace MHC2Gen
                 mhc2_lut = new double[3, lut_size];
                 for (int ch = 0; ch < 3; ch++)
                 {
+                    var black = deviceEotf[ch].EvalF32(0);
                     for (int iinput = 0; iinput < lut_size; iinput++)
                     {
                         var input = (float)iinput / (lut_size - 1);
                         var linear = outputTrc.EvalF32(input);
-                        var dev_output = deviceOetf[ch].EvalF32(linear);
+                        var linear_bpc = black + linear * (1 - black);
+                        var dev_output = deviceOetf[ch].EvalF32(linear_bpc);
                         if (vcgt != null)
                         {
                             dev_output = vcgt[ch].EvalF32(dev_output);
