@@ -43,7 +43,7 @@ namespace LittleCms.Data
         }
         protected override void FreeObject()
         {
-            throw new NotImplementedException();
+            cmsFreeToneCurve(Handle);
         }
 
         public ToneCurve Reverse()
