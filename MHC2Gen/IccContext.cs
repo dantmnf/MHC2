@@ -278,6 +278,8 @@ namespace MHC2Gen
 
         public bool ReallyWantGamma22 { get; set; } = false;
 
+        public bool UseBlackPointCompensation { get; set; } = true;
+
         public DeviceIccContext(IccProfile profile) : base(profile)
         {
             illuminantRelativeBlackPoint = GetIlluminantRelativeBlackPoint();
@@ -347,15 +349,55 @@ namespace MHC2Gen
             return (max_nits, min_nits);
         }
 
+        private double[,] BuildSdrMhcLut(ToneCurve[]? vcgt, ToneCurve? reinterpretInput)
+        {
+            var deviceEotf = new ToneCurve[] { profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve };
+            var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
+            var outputTrc = reinterpretInput ?? IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag);
+
+            if (vcgt == null && reinterpretInput == null)
+            {
+                return new double[,]
+                {
+                    { 0, 1 },
+                    { 0, 1 },
+                    { 0, 1 },
+                };
+            }
+
+            const int lut_size = 1024;
+
+            var use_bpc = UseBlackPointCompensation;
+
+            var mhc2_lut = new double[3, lut_size];
+            for (int ch = 0; ch < 3; ch++)
+            {
+                var black = deviceEotf[ch].EvalF32(0);
+                for (int iinput = 0; iinput < lut_size; iinput++)
+                {
+                    var input = (float)iinput / (lut_size - 1);
+                    var linear = outputTrc.EvalF32(input);
+                    if (use_bpc)
+                    {
+                        linear = black + linear * (1 - black);
+                    }
+                    var dev_output = deviceOetf[ch].EvalF32(linear);
+                    if (vcgt != null)
+                    {
+                        dev_output = vcgt[ch].EvalF32(dev_output);
+                    }
+                    mhc2_lut[ch, iinput] = dev_output;
+                }
+            }
+            return mhc2_lut;
+        }
+
         public IccProfile CreateMhc2CscIcc(RgbPrimaries? sourcePrimaries = null, string sourceDescription = "sRGB")
         {
             var wtpt = IlluminantRelativeWhitePoint;
             var vcgt = profile.ReadTagOrDefault(SafeTagSignature.VcgtTag)?.ToArray();
 
             var devicePrimaries = ProfilePrimaries;
-
-            var deviceEotf = new ToneCurve[] { profileRedToneCurve, profileGreenToneCurve, profileBlueToneCurve };
-            var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
 
             var srgbTrc = IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag)!;
             var outputTrc = ReallyWantGamma22 ? new ToneCurve(2.2) : srgbTrc;
@@ -412,37 +454,7 @@ namespace MHC2Gen
                { user_matrix[2,0], user_matrix[2,1], user_matrix[2,2], 0 },
             };
 
-            double[,] mhc2_lut;
-            if (vcgt != null)
-            {
-                var lut_size = 1024;
-                mhc2_lut = new double[3, lut_size];
-                for (int ch = 0; ch < 3; ch++)
-                {
-                    var black = deviceEotf[ch].EvalF32(0);
-                    for (int iinput = 0; iinput < lut_size; iinput++)
-                    {
-                        var input = (float)iinput / (lut_size - 1);
-                        var linear = outputTrc.EvalF32(input);
-                        var linear_bpc = black + linear * (1 - black);
-                        var dev_output = deviceOetf[ch].EvalF32(linear_bpc);
-                        if (vcgt != null)
-                        {
-                            dev_output = vcgt[ch].EvalF32(dev_output);
-                        }
-                        mhc2_lut[ch, iinput] = dev_output;
-                    }
-                }
-            }
-            else
-            {
-                mhc2_lut = new double[,]
-                {
-                    { 0, 1 },
-                    { 0, 1 },
-                    { 0, 1 },
-                };
-            }
+            var mhc2_lut = BuildSdrMhcLut(vcgt, outputTrc);
 
             var mhc2d = new MHC2Tag
             {
@@ -622,25 +634,7 @@ namespace MHC2Gen
             {
                 var sourceEotf = ReallyWantGamma22 ? new ToneCurve(2.2) : IccProfile.Create_sRGB().ReadTag(SafeTagSignature.RedTRCTag);
                 outputprofileTrc = new RgbToneCurve(sourceEotf, sourceEotf, sourceEotf);
-
-                var deviceOetf = new ToneCurve[] { profileRedReverseToneCurve, profileGreenReverseToneCurve, profileBlueReverseToneCurve };
-                var lut_size = 1024;
-                mhc2_lut = new double[3, lut_size];
-                for (int ch = 0; ch < 3; ch++)
-                {
-                    for (int iinput = 0; iinput < lut_size; iinput++)
-                    {
-                        var input = (float)iinput / (lut_size - 1);
-                        var linear = sourceEotf.EvalF32(input);
-                        var dev_output = deviceOetf[ch].EvalF32(linear);
-                        if (vcgt != null)
-                        {
-                            dev_output = vcgt[ch].EvalF32(dev_output);
-                        }
-                        mhc2_lut[ch, iinput] = dev_output;
-                    }
-
-                }
+                mhc2_lut = BuildSdrMhcLut(vcgt, sourceEotf);
             }
             else if (vcgt != null)
             {

@@ -37,6 +37,7 @@ namespace MHC2Gen
             var chromAdaptOpt = new Option<bool>("--chromatic-adaptation", "equivalent to --keep-whitepoint=Bradford");
 
             var calibTransOpt = new Option<bool>("--calibrate-transfer", "calibrate output transfer to sRGB");
+            var noBpcOpt = new Option<bool>("--no-bpc", "disable black point compensation");
             var reallyWantGamma22 = new Option<bool>("--i-really-want-gamma-2.2") { IsHidden = true };
 
             var minNitsOpt = new Option<double?>("--min-nits", "override minimum brightness nits");
@@ -52,6 +53,7 @@ namespace MHC2Gen
                 srcGamutOpt,
                 srcGamutIccOpt,
                 reallyWantGamma22,
+                noBpcOpt,
                 keepWhitePointOpt,
                 chromAdaptOpt,
                 devProfArg,
@@ -63,6 +65,7 @@ namespace MHC2Gen
                 outProfDescOpt,
                 outProfVerOpt,
                 calibTransOpt,
+                noBpcOpt,
                 reallyWantGamma22,
                 keepWhitePointOpt,
                 chromAdaptOpt,
@@ -164,6 +167,7 @@ namespace MHC2Gen
                 var ctx = new DeviceIccContext(devicc);
                 ctx.KeepProfileWhitePoint = keepwp;
                 ctx.ReallyWantGamma22 = parse.GetValueForOption(reallyWantGamma22);
+                ctx.UseBlackPointCompensation = !parse.GetValueForOption(noBpcOpt);
                 var mhc2icc = ctx.CreateMhc2CscIcc(srcgamut, srcdesc);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
@@ -189,6 +193,7 @@ namespace MHC2Gen
                 var ctx = new DeviceIccContext(devicc);
                 ctx.KeepProfileWhitePoint = keepwp;
                 ctx.ReallyWantGamma22 = parse.GetValueForOption(reallyWantGamma22);
+                ctx.UseBlackPointCompensation = !parse.GetValueForOption(noBpcOpt);
                 var mhc2icc = ctx.CreateSdrAcmIcc(calibrate);
                 SetProfileProp(mhc2icc, profdesc, profver);
                 File.WriteAllBytes(outputProfile, mhc2icc.GetBytes());
