@@ -17,7 +17,7 @@ namespace LittleCms
 
         protected CmsObject(IntPtr handle, bool moveOwnership)
         {
-            AttachObject(handle, isOwner);
+            AttachObject(handle, moveOwnership);
         }
 
 
