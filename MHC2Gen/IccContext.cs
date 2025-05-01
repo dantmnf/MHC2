@@ -278,8 +278,6 @@ namespace MHC2Gen
 
         public bool ReallyWantGamma22 { get; set; } = false;
 
-        public bool UseBlackPointCompensation { get; set; } = true;
-
         public DeviceIccContext(IccProfile profile) : base(profile)
         {
             illuminantRelativeBlackPoint = GetIlluminantRelativeBlackPoint();
@@ -287,9 +285,9 @@ namespace MHC2Gen
             profileRedToneCurve = profile.ReadTag(SafeTagSignature.RedTRCTag);
             profileGreenToneCurve = profile.ReadTag(SafeTagSignature.GreenTRCTag);
             profileBlueToneCurve = profile.ReadTag(SafeTagSignature.BlueTRCTag);
-            profileRedReverseToneCurve = profileRedToneCurve.Reverse();
-            profileGreenReverseToneCurve = profileGreenToneCurve.Reverse();
-            profileBlueReverseToneCurve = profileBlueToneCurve.Reverse();
+            profileRedReverseToneCurve = profileRedToneCurve.Reverse(32768);
+            profileGreenReverseToneCurve = profileGreenToneCurve.Reverse(32768);
+            profileBlueReverseToneCurve = profileBlueToneCurve.Reverse(32768);
         }
 
         public static Matrix<double> RgbToXYZ(RgbPrimaries primaries)
@@ -367,8 +365,6 @@ namespace MHC2Gen
 
             const int lut_size = 1024;
 
-            var use_bpc = UseBlackPointCompensation;
-
             var mhc2_lut = new double[3, lut_size];
             for (int ch = 0; ch < 3; ch++)
             {
@@ -377,10 +373,6 @@ namespace MHC2Gen
                 {
                     var input = (float)iinput / (lut_size - 1);
                     var linear = outputTrc.EvalF32(input);
-                    if (use_bpc)
-                    {
-                        linear = black + linear * (1 - black);
-                    }
                     var dev_output = deviceOetf[ch].EvalF32(linear);
                     if (vcgt != null)
                     {
