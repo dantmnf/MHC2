@@ -52,12 +52,6 @@ namespace LittleCms.Data
             return new(handle, true);
         }
 
-        public ToneCurve Reverse(int samples)
-        {
-            var handle = CheckError(cmsReverseToneCurveEx((uint)samples, Handle));
-            return new(handle, true);
-        }
-
         public ToneCurve Reverse(uint sampleCount)
         {
             var handle = CheckError(cmsReverseToneCurveEx(sampleCount, Handle));
