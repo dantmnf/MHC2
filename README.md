@@ -60,7 +60,7 @@ Matrix: [BT2020 RGB to XYZ] -> XYZ to BT2020 RGB -> BT2020 RGB to Device RGB -> 
 LUT: vcgt(device transfer evaluated with absolute luminance)
 
 ```
-MHC2Gen hdr-decode [--min-nits=<override minimun luminance>] [--man-nits=<override maximum luminance>] "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL PQ10 decode.icm"
+MHC2Gen hdr-decode [--min-nits=<override minimun luminance>] [--max-nits=<override maximum luminance>] "C:\...\DisplayCAL\storage\...\MODEL #1 2022-01-01 00-00 0.3127x 0.329y sRGB F-S XYZLUT+MTX.icm" "MODEL PQ10 decode.icm"
 ```
 
 The wire signal is converted to SDR but still tagged HDR. This is tricky to use, you need to put Windows in HDR mode but display in SDR mode, possibly with EDID override and/or OSD settings.
